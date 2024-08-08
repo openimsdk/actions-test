@@ -1,0 +1,69 @@
+name: Remove Unused Labels
+on:
+  schedule:
+    - cron: '0 * * * *' # 每周运行一次
+  workflow_dispatch: # 手动触发
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+      contents: read
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+
+      - name: Fetch All Issues and PRs
+        id: fetch_issues_prs
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'all',
+              per_page: 100
+            });
+
+            const labelsInUse = new Set();
+            issues.forEach(issue => {
+              issue.labels.forEach(label => {
+                labelsInUse.add(label.name);
+              });
+            });
+
+            return Array.from(labelsInUse);
+
+      - name: Fetch All Labels
+        id: fetch_labels
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const labels = await github.paginate(github.rest.issues.listLabelsForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 100
+            });
+
+            return labels.map(label => label.name);
+
+      - name: Remove Unused Labels
+        if: steps.fetch_issues_prs.outputs.result && steps.fetch_labels.outputs.result
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const labelsInUse = new Set(JSON.parse(steps.fetch_issues_prs.outputs.result));
+            const allLabels = JSON.parse(steps.fetch_labels.outputs.result);
+
+            const unusedLabels = allLabels.filter(label => !labelsInUse.has(label));
+
+            for (const label of unusedLabels) {
+              await github.rest.issues.deleteLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: label
+              });
+              console.log(`Deleted label: ${label}`);
+            }
