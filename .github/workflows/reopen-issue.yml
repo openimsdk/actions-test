@@ -36,16 +36,6 @@ jobs:
         id: set_issue_numbers
         run: echo "ISSUE_NUMBERS=${{ steps.fetch_issues.outputs.result }}" >> $GITHUB_ENV
 
-  reopen_issues:
-    runs-on: ubuntu-latest
-    needs: reopen_stale_issues
-    permissions:
-      issues: write
-
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
       - name: Reopen Issues
         uses: actions/github-script@v7
         with:
@@ -63,16 +53,6 @@ jobs:
               });
               console.log(`Reopened issue #${issue_number}`);
             }
-
-  remove_label:
-    runs-on: ubuntu-latest
-    needs: reopen_issues
-    permissions:
-      issues: write
-
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
 
       - name: Remove lifecycle/stale Label
         uses: actions/github-script@v7
