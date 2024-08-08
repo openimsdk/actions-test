@@ -28,20 +28,21 @@ jobs:
               per_page: 100
             });
 
-            const issueNumbers = issues.map(issue => issue.number);
+            const issueNumbers = issues
+              .filter(issue => !issue.pull_request) // 排除PR
+              .map(issue => issue.number);
             console.log(`Fetched issues: ${issueNumbers}`);
-            return issueNumbers;
+            return { issue_numbers: issueNumbers.join(',') };
 
       - name: Set issue numbers
-        id: set_issue_numbers
-        run: echo "ISSUE_NUMBERS=${{ steps.fetch_issues.outputs.result }}" >> $GITHUB_ENV
+        run: echo "ISSUE_NUMBERS=${{ steps.fetch_issues.outputs.issue_numbers }}" >> $GITHUB_ENV
 
       - name: Reopen Issues
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const issueNumbers = JSON.parse(process.env.ISSUE_NUMBERS);
+            const issueNumbers = process.env.ISSUE_NUMBERS.split(',');
 
             for (const issue_number of issueNumbers) {
               // Reopen the issue
@@ -59,7 +60,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const issueNumbers = JSON.parse(process.env.ISSUE_NUMBERS);
+            const issueNumbers = process.env.ISSUE_NUMBERS.split(',');
 
             for (const issue_number of issueNumbers) {
               // Remove the lifecycle/stale label
