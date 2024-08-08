@@ -36,13 +36,23 @@ jobs:
         id: set_issue_numbers
         run: echo "ISSUE_NUMBERS=${{ steps.fetch_issues.outputs.result }}" >> $GITHUB_ENV
 
-      - name: Reopen and Remove Label
+  reopen_issues:
+    runs-on: ubuntu-latest
+    needs: reopen_stale_issues
+    permissions:
+      issues: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Reopen Issues
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const issueNumbers = JSON.parse(process.env.ISSUE_NUMBERS);
-            
+
             for (const issue_number of issueNumbers) {
               // Reopen the issue
               await github.rest.issues.update({
@@ -52,7 +62,26 @@ jobs:
                 state: 'open'
               });
               console.log(`Reopened issue #${issue_number}`);
+            }
 
+  remove_label:
+    runs-on: ubuntu-latest
+    needs: reopen_issues
+    permissions:
+      issues: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Remove lifecycle/stale Label
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issueNumbers = JSON.parse(process.env.ISSUE_NUMBERS);
+
+            for (const issue_number of issueNumbers) {
               // Remove the lifecycle/stale label
               await github.rest.issues.removeLabel({
                 owner: context.repo.owner,
