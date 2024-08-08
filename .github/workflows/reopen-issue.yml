@@ -27,15 +27,16 @@ jobs:
               per_page: 100
             });
 
-            return { issue_numbers: issues.map(issue => issue.number).join(',') };
-          result-encoding: string
+            const issueNumbers = issues.map(issue => issue.number).join(',');
+            console.log(`Fetched issues: ${issueNumbers}`);
+            return { issue_numbers: issueNumbers };
 
       - name: Reopen and Remove Label
         uses: actions/github-script@v7.0.1
         with:
           github-token: ${{ secrets.BOT_GITHUB_TOKEN }}
           script: |
-            const issueNumbers = process.env.ISSUE_NUMBERS.split(',');
+            const issueNumbers = "${{ steps.fetch_issues.outputs.issue_numbers }}".split(',');
 
             for (const issue_number of issueNumbers) {
               // Reopen the issue
@@ -56,5 +57,3 @@ jobs:
               });
               console.log(`Removed label 'lifecycle/stale' from issue #${issue_number}`);
             }
-        env:
-          ISSUE_NUMBERS: ${{ steps.fetch_issues.outputs.result }}
