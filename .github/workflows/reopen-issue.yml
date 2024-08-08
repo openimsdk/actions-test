@@ -27,7 +27,7 @@ jobs:
               per_page: 100
             });
 
-            return { issue_numbers: issues.map(issue => issue.number) };
+            return { issue_numbers: issues.map(issue => issue.number).join(',') };
           result-encoding: string
 
       - name: Reopen and Remove Label
@@ -35,14 +35,14 @@ jobs:
         with:
           github-token: ${{ secrets.BOT_GITHUB_TOKEN }}
           script: |
-            const issueNumbers = JSON.parse(process.env.ISSUE_NUMBERS);
+            const issueNumbers = process.env.ISSUE_NUMBERS.split(',');
 
             for (const issue_number of issueNumbers) {
               // Reopen the issue
               await github.rest.issues.update({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                issue_number,
+                issue_number: parseInt(issue_number, 10),
                 state: 'open'
               });
               console.log(`Reopened issue #${issue_number}`);
@@ -51,10 +51,10 @@ jobs:
               await github.rest.issues.removeLabel({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                issue_number,
+                issue_number: parseInt(issue_number, 10),
                 name: 'lifecycle/stale'
               });
               console.log(`Removed label 'lifecycle/stale' from issue #${issue_number}`);
             }
         env:
-          ISSUE_NUMBERS: ${{ steps.fetch_issues.outputs.result.issue_numbers }}
+          ISSUE_NUMBERS: ${{ steps.fetch_issues.outputs.result }}
