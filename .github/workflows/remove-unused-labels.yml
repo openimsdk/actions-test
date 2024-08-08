@@ -1,7 +1,7 @@
 name: Remove Unused Labels
 on:
   schedule:
-    - cron: '0 * * * *' # 每周运行一次
+    - cron: '0 0 * * 0' # 每周运行一次
   workflow_dispatch: # 手动触发
 
 jobs:
@@ -17,8 +17,9 @@ jobs:
 
       - name: Fetch All Issues and PRs
         id: fetch_issues_prs
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7.0.1
         with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const issues = await github.paginate(github.rest.issues.listForRepo, {
               owner: context.repo.owner,
@@ -35,11 +36,13 @@ jobs:
             });
 
             return Array.from(labelsInUse);
+          result-encoding: string
 
       - name: Fetch All Labels
         id: fetch_labels
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7.0.1
         with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const labels = await github.paginate(github.rest.issues.listLabelsForRepo, {
               owner: context.repo.owner,
@@ -48,14 +51,15 @@ jobs:
             });
 
             return labels.map(label => label.name);
+          result-encoding: string
 
       - name: Remove Unused Labels
-        if: steps.fetch_issues_prs.outputs.result && steps.fetch_labels.outputs.result
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7.0.1
         with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const labelsInUse = new Set(JSON.parse(steps.fetch_issues_prs.outputs.result));
-            const allLabels = JSON.parse(steps.fetch_labels.outputs.result);
+            const labelsInUse = new Set(JSON.parse(github.steps.fetch_issues_prs.outputs.result));
+            const allLabels = JSON.parse(github.steps.fetch_labels.outputs.result);
 
             const unusedLabels = allLabels.filter(label => !labelsInUse.has(label));
 
