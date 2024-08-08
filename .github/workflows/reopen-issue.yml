@@ -10,9 +10,6 @@ jobs:
       issues: write
       contents: read
 
-    env:
-      ISSUE_NUMBERS: ""
-
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -33,29 +30,26 @@ jobs:
 
             const issueNumbers = issues.map(issue => issue.number);
             console.log(`Fetched issues: ${issueNumbers}`);
-            return { issue_numbers: issueNumbers.join(',') };
+            return issueNumbers;
 
       - name: Set issue numbers
-        run: |
-          echo "ISSUE_NUMBERS=${{ steps.fetch_issues.outputs.issue_numbers }}" >> $GITHUB_ENV
-          echo "Fetched Issue Numbers: ${{ steps.fetch_issues.outputs.issue_numbers }}"
+        id: set_issue_numbers
+        run: echo "ISSUE_NUMBERS=${{ steps.fetch_issues.outputs.result }}" >> $GITHUB_ENV
 
       - name: Check if issue numbers are empty
-        id: check_empty
         run: |
-          if [ -z "${ISSUE_NUMBERS}" ]; then
+          if [ -z "${{ env.ISSUE_NUMBERS }}" ]; then
             echo "No issues found with the 'lifecycle/stale' label. Exiting."
-            exit 0
+            exit 1
           fi
           echo "Issue Numbers are not empty, proceeding."
-        continue-on-error: true
 
       - name: Reopen Issues
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const issueNumbers = process.env.ISSUE_NUMBERS.split(',');
+            const issueNumbers = JSON.parse(process.env.ISSUE_NUMBERS);
             console.log(`Reopening issues: ${issueNumbers}`);
 
             for (const issue_number of issueNumbers) {
@@ -74,7 +68,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const issueNumbers = process.env.ISSUE_NUMBERS.split(',');
+            const issueNumbers = JSON.parse(process.env.ISSUE_NUMBERS);
             console.log(`Removing 'lifecycle/stale' label from issues: ${issueNumbers}`);
 
             for (const issue_number of issueNumbers) {
