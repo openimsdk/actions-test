@@ -11,7 +11,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Fetch All Issues and PRs
         id: fetch_issues_prs
