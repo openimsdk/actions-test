@@ -31,21 +31,13 @@ jobs:
               .filter(issue => !issue.pull_request) // 排除PR
               .map(issue => issue.number);
             console.log(`Fetched issues: ${issueNumbers}`);
-            return { issue_numbers: issueNumbers.join(',') };
+            return { issue_numbers: JSON.stringify(issueNumbers) };
 
       - name: Set issue numbers
         id: set_issue_numbers
         run: |
-          echo "ISSUE_NUMBERS=${{ steps.fetch_issues.outputs.result }}" >> $GITHUB_ENV
-          echo "Issue numbers: ${{ steps.fetch_issues.outputs.result }}"
-
-      # - name: Check if issue numbers are empty
-      #   run: |
-      #     if [ -z "${{ env.ISSUE_NUMBERS }}" ]; then
-      #       echo "No issues found with the 'lifecycle/stale' label. Exiting."
-      #       exit 1
-      #     fi
-      #     echo "Issue Numbers are not empty, proceeding."
+          echo "ISSUE_NUMBERS=${{ steps.fetch_issues.outputs.issue_numbers }}" >> $GITHUB_ENV
+          echo "Issue numbers: ${{ steps.fetch_issues.outputs.issue_numbers }}"
 
       - name: Reopen Issues
         uses: actions/github-script@v7
@@ -60,7 +52,7 @@ jobs:
               await github.rest.issues.update({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                issue_number: parseInt(issue_number, 10),
+                issue_number: issue_number,
                 state: 'open'
               });
               console.log(`Reopened issue #${issue_number}`);
@@ -79,7 +71,7 @@ jobs:
               await github.rest.issues.removeLabel({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                issue_number: parseInt(issue_number, 10),
+                issue_number: issue_number,
                 name: 'lifecycle/stale'
               });
               console.log(`Removed label 'lifecycle/stale' from issue #${issue_number}`);
