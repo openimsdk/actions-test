@@ -35,14 +35,26 @@ jobs:
             return { issue_numbers: issueNumbers.join(',') };
 
       - name: Set issue numbers
-        run: echo "ISSUE_NUMBERS=${{ steps.fetch_issues.outputs.issue_numbers }}" >> $GITHUB_ENV
+        run: |
+          echo "ISSUE_NUMBERS=${{ steps.fetch_issues.outputs.issue_numbers }}" >> $GITHUB_ENV
+          echo "Issue numbers: ${{ steps.fetch_issues.outputs.issue_numbers }}"
+
+      - name: Check if issue numbers are empty
+        run: |
+          if [ -z "${{ steps.fetch_issues.outputs.issue_numbers }}" ]; then
+            echo "No issues found with the 'lifecycle/stale' label. Exiting."
+            exit 0
+          fi
 
       - name: Reopen Issues
         uses: actions/github-script@v7
+        env:
+          ISSUE_NUMBERS: ${{ steps.fetch_issues.outputs.issue_numbers }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const issueNumbers = process.env.ISSUE_NUMBERS.split(',');
+            console.log(`Reopening issues: ${issueNumbers}`);
 
             for (const issue_number of issueNumbers) {
               // Reopen the issue
@@ -57,10 +69,13 @@ jobs:
 
       - name: Remove lifecycle/stale Label
         uses: actions/github-script@v7
+        env:
+          ISSUE_NUMBERS: ${{ steps.fetch_issues.outputs.issue_numbers }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const issueNumbers = process.env.ISSUE_NUMBERS.split(',');
+            console.log(`Removing 'lifecycle/stale' label from issues: ${issueNumbers}`);
 
             for (const issue_number of issueNumbers) {
               // Remove the lifecycle/stale label
