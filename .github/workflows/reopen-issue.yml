@@ -15,7 +15,7 @@ jobs:
 
       - name: Fetch Closed Issues with lifecycle/stale Label
         id: fetch_issues
-        uses: actions/github-script@v7.0.1
+        uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.BOT_GITHUB_TOKEN }}
           script: |
@@ -27,17 +27,21 @@ jobs:
               per_page: 100
             });
 
-            const issueNumbers = issues.map(issue => issue.number).join(',');
+            const issueNumbers = issues.map(issue => issue.number);
             console.log(`Fetched issues: ${issueNumbers}`);
-            return { issue_numbers: issueNumbers };
+            return issueNumbers;
+
+      - name: Set issue numbers
+        id: set_issue_numbers
+        run: echo "ISSUE_NUMBERS=${{ steps.fetch_issues.outputs.result }}" >> $GITHUB_ENV
 
       - name: Reopen and Remove Label
-        uses: actions/github-script@v7.0.1
+        uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.BOT_GITHUB_TOKEN }}
           script: |
-            const issueNumbers = "${{ steps.fetch_issues.outputs.issue_numbers }}".split(',');
-
+            const issueNumbers = JSON.parse(process.env.ISSUE_NUMBERS);
+            
             for (const issue_number of issueNumbers) {
               // Reopen the issue
               await github.rest.issues.update({
