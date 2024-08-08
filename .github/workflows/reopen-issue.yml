@@ -10,6 +10,9 @@ jobs:
       issues: write
       contents: read
 
+    env:
+      ISSUE_NUMBERS: ""
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -35,19 +38,20 @@ jobs:
       - name: Set issue numbers
         run: |
           echo "ISSUE_NUMBERS=${{ steps.fetch_issues.outputs.issue_numbers }}" >> $GITHUB_ENV
-          echo "Issue numbers: ${{ steps.fetch_issues.outputs.issue_numbers }}"
+          echo "Fetched Issue Numbers: ${{ steps.fetch_issues.outputs.issue_numbers }}"
 
       - name: Check if issue numbers are empty
+        id: check_empty
         run: |
-          if [ -z "${{ steps.fetch_issues.outputs.issue_numbers }}" ]; then
+          if [ -z "${ISSUE_NUMBERS}" ]; then
             echo "No issues found with the 'lifecycle/stale' label. Exiting."
             exit 0
           fi
+          echo "Issue Numbers are not empty, proceeding."
+        continue-on-error: true
 
       - name: Reopen Issues
         uses: actions/github-script@v7
-        env:
-          ISSUE_NUMBERS: ${{ steps.fetch_issues.outputs.issue_numbers }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -67,8 +71,6 @@ jobs:
 
       - name: Remove lifecycle/stale Label
         uses: actions/github-script@v7
-        env:
-          ISSUE_NUMBERS: ${{ steps.fetch_issues.outputs.issue_numbers }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
