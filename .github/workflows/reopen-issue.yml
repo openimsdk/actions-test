@@ -31,13 +31,14 @@ jobs:
               .filter(issue => !issue.pull_request) // 排除PR
               .map(issue => issue.number);
             console.log(`Fetched issues: ${issueNumbers}`);
-            return { issue_numbers: JSON.stringify(issueNumbers) };
+            return issueNumbers;
 
       - name: Set issue numbers
         id: set_issue_numbers
         run: |
           echo "ISSUE_NUMBERS=${{ steps.fetch_issues.outputs.issue_numbers }}" >> $GITHUB_ENV
           echo "Issue numbers: ${{ steps.fetch_issues.outputs.issue_numbers }}"
+          echo "ISSUE_NUMBERS=${{ steps.fetch_issues.outputs.result }}"
 
       - name: Reopen Issues
         uses: actions/github-script@v7
