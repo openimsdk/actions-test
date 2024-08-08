@@ -13,7 +13,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Fetch All Issues and PRs
         id: fetch_issues_prs
@@ -35,7 +35,7 @@ jobs:
               });
             });
 
-            return Array.from(labelsInUse);
+            return JSON.stringify(Array.from(labelsInUse));
           result-encoding: string
 
       - name: Fetch All Labels
@@ -50,7 +50,7 @@ jobs:
               per_page: 100
             });
 
-            return labels.map(label => label.name);
+            return JSON.stringify(labels.map(label => label.name));
           result-encoding: string
 
       - name: Remove Unused Labels
@@ -58,8 +58,8 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const labelsInUse = new Set(JSON.parse(github.steps.fetch_issues_prs.outputs.result));
-            const allLabels = JSON.parse(github.steps.fetch_labels.outputs.result);
+            const labelsInUse = new Set(JSON.parse(process.env.LABELS_IN_USE));
+            const allLabels = JSON.parse(process.env.ALL_LABELS);
 
             const unusedLabels = allLabels.filter(label => !labelsInUse.has(label));
 
@@ -71,3 +71,6 @@ jobs:
               });
               console.log(`Deleted label: ${label}`);
             }
+        env:
+          LABELS_IN_USE: ${{ steps.fetch_issues_prs.outputs.result }}
+          ALL_LABELS: ${{ steps.fetch_labels.outputs.result }}
