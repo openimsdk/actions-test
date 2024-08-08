@@ -27,22 +27,25 @@ jobs:
               labels: 'lifecycle/stale',
               per_page: 100
             });
-
-            const issueNumbers = issues.map(issue => issue.number);
+            const issueNumbers = issues
+              .filter(issue => !issue.pull_request) // 排除PR
+              .map(issue => issue.number);
             console.log(`Fetched issues: ${issueNumbers}`);
-            return issueNumbers;
+            return { issue_numbers: issueNumbers.join(',') };
 
       - name: Set issue numbers
         id: set_issue_numbers
-        run: echo "ISSUE_NUMBERS=${{ steps.fetch_issues.outputs.result }}" >> $GITHUB_ENV
-
-      - name: Check if issue numbers are empty
         run: |
-          if [ -z "${{ env.ISSUE_NUMBERS }}" ]; then
-            echo "No issues found with the 'lifecycle/stale' label. Exiting."
-            exit 1
-          fi
-          echo "Issue Numbers are not empty, proceeding."
+          echo "ISSUE_NUMBERS=${{ steps.fetch_issues.outputs.result }}" >> $GITHUB_ENV
+          echo "Issue numbers: ${{ steps.fetch_issues.outputs.result }}"
+
+      # - name: Check if issue numbers are empty
+      #   run: |
+      #     if [ -z "${{ env.ISSUE_NUMBERS }}" ]; then
+      #       echo "No issues found with the 'lifecycle/stale' label. Exiting."
+      #       exit 1
+      #     fi
+      #     echo "Issue Numbers are not empty, proceeding."
 
       - name: Reopen Issues
         uses: actions/github-script@v7
