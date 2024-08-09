@@ -47,11 +47,24 @@ jobs:
         #   sudo sleep 30  # Increased sleep time for better stability
         # timeout-minutes: 60 # Increased timeout for Docker setup
 
+
+    # - name: Get Internal IP Address
+    #   id: get-ip
+    #   run: |
+    #     IP=$(hostname -I | awk '{print $1}')
+    #     echo "The IP Address is: $IP"
+    #     echo "::set-output name=ip::$IP"
+      
+    # - name: Update .env
+    #   run: |
+    #     sed -i 's|externalAddress:.*|externalAddress: "http://${{ steps.get-ip.outputs.ip }}:10005"|' config/minio.yml
+    #     cat config/minio.yml
+
       - name: Build and test Server Services
         run: |
-          mage build
-          mage start
-          mage check
+          sudo mage build
+          sudo mage start
+          sudo mage check
 
       - name: Checkout Chat repository
         uses: actions/checkout@v4
@@ -69,9 +82,9 @@ jobs:
       - name: Build and test Chat Services
         run: |
           cd ${{ github.workspace }}/chat-repo
-          mage build
-          mage start
-          mage check
+          sudo mage build
+          sudo mage start
+          sudo mage check
 
   dockerfile-test:
     name: Build and Test Dockerfile
@@ -97,7 +110,6 @@ jobs:
 
       - name: Build Docker Image
         run: |
-          # 使用项目名构建镜像名
           IMAGE_NAME="${{ github.event.repository.name }}-test"
           CONTAINER_NAME="${{ github.event.repository.name }}-container"
           docker build -t $IMAGE_NAME .
