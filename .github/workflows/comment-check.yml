@@ -36,12 +36,15 @@ jobs:
           --exclude="$EXCLUDE_FILES" \
           || true | tee -a $output_file
 
-        # 如果发现了中文注释，输出注释内容及其位置
+        # 如果发现了中文注释，输出注释内容及其位置，并退出
         if [ -s "$output_file" ]; then
           echo "Chinese comments found in the following locations:"
           cat "$output_file"
-          exit 1
+          exit 1  # 退出并标记为失败
+        else
+          echo "No Chinese comments found."
         fi
 
-        # 如果没有找到中文注释，则输出以下内容
-        echo "No Chinese comments found."
+    - name: Fail step if Chinese comments were found
+      if: failure()
+      run: exit 1
