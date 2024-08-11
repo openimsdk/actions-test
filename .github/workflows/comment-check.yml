@@ -11,33 +11,40 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      # 定义要排除的目录
-      EXCLUDE_DIRS: '.git,docs,tests,scripts,assets,node_modules,build'
-      # 定义要排除的文件类型
-      EXCLUDE_FILES: '*.md,*.txt,*.html,*.css,*.min.js'
+      EXCLUDE_DIRS: ".git docs tests scripts assets node_modules build"
+      EXCLUDE_FILES: "*.md *.txt *.html *.css *.min.js"
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Search for Chinese comments
-      run: |
-        set -e
-        # 定义正则表达式模式匹配中文字符
-        pattern='[\p{Han}]'
+      - name: Search for Chinese comments
+        run: |
+          set -e
+          # 定义正则表达式模式匹配中文字符
+          pattern='[\p{Han}]'
 
-        # 使用 grep 查找所有包含中文字符的注释并保存到文件
-        grep -Pnr "$pattern" . \
-          --exclude-dir={$EXCLUDE_DIRS} \
-          --exclude="$EXCLUDE_FILES" \
-          > chinese_comments.txt || true
+          # 处理要排除的目录
+          exclude_dirs=""
+          for dir in $EXCLUDE_DIRS; do
+            exclude_dirs="$exclude_dirs --exclude-dir=$dir"
+          done
 
-    - name: Output and fail if Chinese comments are found
-      run: |
-        if [ -s chinese_comments.txt ]; then
-          echo "Chinese comments found in the following locations:"
-          cat chinese_comments.txt
-          exit 1  # 标记为失败并终止整个工作流
-        else
-          echo "No Chinese comments found."
-        fi
+          # 处理要排除的文件类型
+          exclude_files=""
+          for file in $EXCLUDE_FILES; do
+            exclude_files="$exclude_files --exclude=$file"
+          done
+
+          # 使用 grep 查找所有包含中文字符的注释并保存到文件
+          grep -Pnr "$pattern" . $exclude_dirs $exclude_files > chinese_comments.txt || true
+
+      - name: Output and fail if Chinese comments are found
+        run: |
+          if [ -s chinese_comments.txt ]; then
+            cat chinese_comments.txt
+            echo "Chinese comments found in the following locations:"
+            exit 1  # 标记为失败并终止整个工作流
+          else
+            echo "No Chinese comments found."
+          fi
