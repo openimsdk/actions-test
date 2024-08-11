@@ -21,6 +21,7 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Search for Chinese comments
+      id: search_comments
       run: |
         set -e
         # 定义正则表达式模式匹配中文字符
@@ -36,15 +37,12 @@ jobs:
           --exclude="$EXCLUDE_FILES" \
           || true | tee -a $output_file
 
-        # 如果发现了中文注释，输出注释内容及其位置，并退出
-        if [ -s "$output_file" ]; then
+    - name: Check if Chinese comments were found
+      run: |
+        if [ -s chinese_comments.txt ]; then
           echo "Chinese comments found in the following locations:"
-          cat "$output_file"
-          exit 1  # 退出并标记为失败
+          cat chinese_comments.txt
+          exit 1  # 失败并终止整个工作流
         else
           echo "No Chinese comments found."
         fi
-
-    - name: Fail step if Chinese comments were found
-      if: failure()
-      run: exit 1
