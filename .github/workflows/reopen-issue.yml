@@ -11,10 +11,9 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      # 定义要排除的目录
+      # 定义要排除的目录和文件类型
       EXCLUDE_DIRS: '.git,docs,tests,scripts,assets,node_modules,build'
-      # 定义要排除的文件类型
-      EXCLUDE_FILES: '*.md,*.txt,*.html,*.css,*.min.js'
+      EXCLUDE_FILES: '*.md *.txt *.html *.css *.min.js'
 
     steps:
     - name: Checkout repository
@@ -26,12 +25,19 @@ jobs:
         # 定义正则表达式模式匹配中文字符
         pattern='[\p{Han}]'
 
-        # 将 EXCLUDE_DIRS 和 EXCLUDE_FILES 分别处理为 grep 的参数
-        exclude_dir_args=$(echo $EXCLUDE_DIRS | sed 's/,/ --exclude-dir=/g' | sed 's/^/--exclude-dir=/')
-        exclude_file_args=$(echo $EXCLUDE_FILES | sed 's/,/ --exclude=/g' | sed 's/^/--exclude=/')
+        # 转换 EXCLUDE_DIRS 和 EXCLUDE_FILES 为 grep 参数
+        exclude_dirs=""
+        for dir in $EXCLUDE_DIRS; do
+          exclude_dirs="$exclude_dirs --exclude-dir=$dir"
+        done
+
+        exclude_files=""
+        for file in $EXCLUDE_FILES; do
+          exclude_files="$exclude_files --exclude=$file"
+        done
 
         # 使用 grep 查找所有包含中文字符的注释并保存到文件
-        grep -Pnr "$pattern" . $exclude_dir_args $exclude_file_args > chinese_comments.txt || true
+        grep -Pnr "$pattern" . $exclude_dirs $exclude_files > chinese_comments.txt || true
 
     - name: Output and fail if Chinese comments are found
       run: |
