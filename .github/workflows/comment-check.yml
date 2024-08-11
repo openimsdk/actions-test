@@ -21,28 +21,23 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Search for Chinese comments
-      id: search_comments
       run: |
         set -e
         # 定义正则表达式模式匹配中文字符
         pattern='[\p{Han}]'
 
-        # 创建一个结果文件
-        output_file=chinese_comments.txt
-        : > $output_file
-
-        # 使用 grep 查找所有包含中文字符的注释
+        # 使用 grep 查找所有包含中文字符的注释并保存到文件
         grep -Pnr "$pattern" . \
           --exclude-dir={$EXCLUDE_DIRS} \
           --exclude="$EXCLUDE_FILES" \
-          || true | tee -a $output_file
+          > chinese_comments.txt || true
 
-    - name: Check if Chinese comments were found
+    - name: Output and fail if Chinese comments are found
       run: |
         if [ -s chinese_comments.txt ]; then
           echo "Chinese comments found in the following locations:"
           cat chinese_comments.txt
-          exit 1  # 失败并终止整个工作流
+          exit 1  # 标记为失败并终止整个工作流
         else
           echo "No Chinese comments found."
         fi
