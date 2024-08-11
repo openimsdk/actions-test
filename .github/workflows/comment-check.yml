@@ -1,4 +1,4 @@
-name: Check for Chinese Characters
+name: Check for Chinese Comments
 
 on:
   pull_request:
@@ -11,32 +11,34 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
     - name: Search for Chinese comments
       run: |
         set -e
-        # 搜索中文字符的模式
-        pattern='[\u4e00-\u9fff]'
+        # 使用扩展正则表达式模式
+        pattern='[一-龥]'
 
         # 创建一个结果文件
         output_file=chinese_comments.txt
         : > $output_file
 
         # 使用 grep 查找所有包含中文字符的注释
-        grep -Pnr "$pattern" . \
+        grep -Ern "$pattern" . \
           --exclude-dir={docs,tests,scripts,assets,node_modules,build} \
           --exclude="*.md" --exclude="*.txt" --exclude="*.html" --exclude="*.css" --exclude="*.min.js" \
           || true | tee -a $output_file
 
         # 如果发现了中文注释，输出注释内容及其位置
-        if [ -s $output_file ]; then
+        if [ -s $output_file]; then
           echo "Chinese comments found in the following locations:"
           cat $output_file
           exit 1
         else
           echo "No Chinese comments found."
         fi
+
 
 
 # jobs:
