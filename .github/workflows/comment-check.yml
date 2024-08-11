@@ -12,7 +12,7 @@ jobs:
 
     env:
       # 定义要排除的目录
-      EXCLUDE_DIRS: 'docs,tests,scripts,assets,node_modules,build'
+      EXCLUDE_DIRS: '.git,docs,tests,scripts,assets,node_modules,build'
       # 定义要排除的文件类型
       EXCLUDE_FILES: '*.md,*.txt,*.html,*.css,*.min.js'
 
@@ -41,6 +41,7 @@ jobs:
           echo "Chinese comments found in the following locations:"
           cat "$output_file"
           exit 1
-        else
-          echo "No Chinese comments found."
         fi
+
+        # 如果没有找到中文注释，则输出以下内容
+        echo "No Chinese comments found."
