@@ -21,13 +21,10 @@ jobs:
         uses: contributor-assistant/github-action@v2.4.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # the below token should have repo scope and must be manually added by you in the repository's secret
-          # This token is required only if you have configured to store the signatures in a remote repository/organization
           PERSONAL_ACCESS_TOKEN: ${{ secrets.BOT_TOKEN }}
         with:
           path-to-signatures: 'signatures/cla.json'
           path-to-document: 'https://github.com/OpenIM-Robot/cla/blob/main/README.md' # e.g. a CLA or a DCO document
-          # branch should not be protected
           branch: 'main'
           allowlist: 'bot*,*bot,OpenIM-Robot'
 
@@ -35,7 +32,7 @@ jobs:
           remote-organization-name: OpenIM-Robot
           remote-repository-name: cla
           create-file-commit-message: 'Creating file for storing CLA Signatures'
-          # signed-commit-message: '$contributorName has signed the CLA in $owner/$repo#$pullRequestNo'
+          signed-commit-message: '$contributorName has signed the CLA in $owner/$repo#$pullRequestNo'
           #custom-notsigned-prcomment: 'pull request comment with Introductory message to ask new contributors to sign'
           custom-notsigned-prcomment: '💕 Thank you for your contribution and please kindly read and sign our [CLA Docs](https://github.com/OpenIM-Robot/cla/blob/main/README.md)'
           custom-pr-sign-comment: 'The signature to be committed in order to sign the CLA'
