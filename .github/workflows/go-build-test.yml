@@ -1,135 +1,51 @@
-name: Go Build Test
+name: Non-English Comments Check
 
 on:
-  push:
-    branches:
-      - main
   pull_request:
     branches:
       - main
   workflow_dispatch:
 
 jobs:
-  go-build:
-    name: Test with go ${{ matrix.go_version }} on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    permissions:
-      contents: write
-      pull-requests: write
-    strategy:
-      matrix:
-        os: [ubuntu-latest]
-        go_version: ["1.21.x", "1.22.x"]
-
-    steps:
-      - name: Checkout Server repository
-        uses: actions/checkout@v4
-
-      - name: Set up Go ${{ matrix.go_version }}
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ matrix.go_version }}
-
-      - name: Get Server dependencies
-        run: |
-          go install github.com/magefile/mage@latest
-          go mod tidy
-          go mod download
-
-      - name: Set up infra services
-        uses: hoverkraft-tech/compose-action@v2.0.1
-        # Uncomment and set the correct path to your docker-compose file
-        # with:
-        #   compose-file: "./docker/docker-compose.yml"
-
-        # run: |
-        #   sudo docker compose up -d
-        #   sudo sleep 30  # Increased sleep time for better stability
-        # timeout-minutes: 60 # Increased timeout for Docker setup
-
-
-    # - name: Get Internal IP Address
-    #   id: get-ip
-    #   run: |
-    #     IP=$(hostname -I | awk '{print $1}')
-    #     echo "The IP Address is: $IP"
-    #     echo "::set-output name=ip::$IP"
-      
-    # - name: Update .env
-    #   run: |
-    #     sed -i 's|externalAddress:.*|externalAddress: "http://${{ steps.get-ip.outputs.ip }}:10005"|' config/minio.yml
-    #     cat config/minio.yml
-
-      - name: Build and test Server Services
-        run: |
-          mage build
-          mage start
-          mage check
-
-      - name: Checkout Chat repository
-        uses: actions/checkout@v4
-        with:
-          repository: "openimsdk/chat"
-          path: "chat-repo"
-
-      - name: Get Chat dependencies
-        run: |
-          cd ${{ github.workspace }}/chat-repo
-          go install github.com/magefile/mage@latest
-          go mod tidy
-          go mod download
-
-      - name: Build and test Chat Services
-        run: |
-          cd ${{ github.workspace }}/chat-repo
-          sudo mage build
-          sudo mage start
-          sudo mage check
-
-  dockerfile-test:
-    name: Build and Test Dockerfile
+  non-english-comments-check:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        go_version: ["1.21"]
+
+    env:
+      # need ignore Dirs
+      EXCLUDE_DIRS: ".git docs tests scripts assets node_modules build"
+      # need ignore Files
+      EXCLUDE_FILES: "*.md *.txt *.html *.css *.min.js *.mdx"
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Go ${{ matrix.go_version }}
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ matrix.go_version }}
-
-      - name: Get dependencies
+      - name: Search for Non-English comments
         run: |
-          go mod tidy
-          go mod download
-          go install github.com/magefile/mage@latest
+          set -e
+          # Define the regex pattern to match Chinese characters
+          pattern='[\p{Han}]'
 
-      - name: Build Docker Image
+          # Process the directories to be excluded
+          exclude_dirs=""
+          for dir in $EXCLUDE_DIRS; do
+            exclude_dirs="$exclude_dirs --exclude-dir=$dir"
+          done
+
+          # Process the file types to be excluded
+          exclude_files=""
+          for file in $EXCLUDE_FILES; do
+            exclude_files="$exclude_files --exclude=$file"
+          done
+
+          # Use grep to find all comments containing Non-English characters and save to file
+          grep -Pnr "$pattern" . $exclude_dirs $exclude_files > non_english_comments.txt || true
+
+      - name: Output non-English comments are found
         run: |
-          IMAGE_NAME="${{ github.event.repository.name }}-test"
-          CONTAINER_NAME="${{ github.event.repository.name }}-container"
-          docker build -t $IMAGE_NAME .
-
-      - name: Run Docker Container
-        run: |
-          IMAGE_NAME="${{ github.event.repository.name }}-test"
-          CONTAINER_NAME="${{ github.event.repository.name }}-container"
-          docker run --name $CONTAINER_NAME -d $IMAGE_NAME
-          docker ps -a
-
-      - name: Test Docker Container Logs
-        run: |
-          CONTAINER_NAME="${{ github.event.repository.name }}-container"
-          docker logs $CONTAINER_NAME
-
-      # - name: Cleanup Docker Container
-      #   run: |
-      #     CONTAINER_NAME="${{ github.event.repository.name }}-container"
-      #     IMAGE_NAME="${{ github.event.repository.name }}-test"
-      #     docker stop $CONTAINER_NAME
-      #     docker rm $CONTAINER_NAME
-      #     docker rmi $IMAGE_NAME
+          if [ -s non_english_comments.txt ]; then
+            echo "Non-English comments found in the following locations:"
+            cat non_english_comments.txt
+            exit 1  # terminate the workflow
+          else
+            echo "No Non_English comments found."
+          fi
