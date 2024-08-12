@@ -1,4 +1,4 @@
-name: Check for Chinese Comments
+name: Non-English Comments Check
 
 on:
   pull_request:
@@ -7,44 +7,45 @@ on:
   workflow_dispatch:
 
 jobs:
-  check_chinese_comments:
+  non-english-comments-check:
     runs-on: ubuntu-latest
 
     env:
+      # need ignore Dirs
       EXCLUDE_DIRS: ".git docs tests scripts assets node_modules build"
-      EXCLUDE_FILES: "*.md *.txt *.html *.css *.min.js"
+      # need ignore Files
+      EXCLUDE_FILES: "*.md *.txt *.html *.css *.min.js *.mdx"
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Search for Chinese comments
+      - name: Search for Non-English comments
         run: |
           set -e
-          # 定义正则表达式模式匹配中文字符
+          # Define the regex pattern to match Chinese characters
           pattern='[\p{Han}]'
 
-          # 处理要排除的目录
+          # Process the directories to be excluded
           exclude_dirs=""
           for dir in $EXCLUDE_DIRS; do
             exclude_dirs="$exclude_dirs --exclude-dir=$dir"
           done
 
-          # 处理要排除的文件类型
+          # Process the file types to be excluded
           exclude_files=""
           for file in $EXCLUDE_FILES; do
             exclude_files="$exclude_files --exclude=$file"
           done
 
-          # 使用 grep 查找所有包含中文字符的注释并保存到文件
-          grep -Pnr "$pattern" . $exclude_dirs $exclude_files > chinese_comments.txt || true
+          # Use grep to find all comments containing Non-English characters and save to file
+          grep -Pnr "$pattern" . $exclude_dirs $exclude_files > non_english_comments.txt || true
 
-      - name: Output and fail if Chinese comments are found
+      - name: Output non-English comments are found
         run: |
-          if [ -s chinese_comments.txt ]; then
-            cat chinese_comments.txt
-            echo "Chinese comments found in the following locations:"
-            exit 1  # 标记为失败并终止整个工作流
+          if [ -s non_english_comments.txt ]; then
+            echo "Non-English comments found in the following locations:"
+            cat non_english_comments.txt
+            exit 1  # terminate the workflow
           else
-            echo "No Chinese comments found."
+            echo "No Non_English comments found."
           fi
