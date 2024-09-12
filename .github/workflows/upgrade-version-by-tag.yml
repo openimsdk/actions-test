@@ -94,31 +94,37 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      # Step 3: Create a new branch for version update
-      - name: Create new branch for version update
-        run: |
-          git checkout -b ${{ env.BRANCH_NAME }}
+      # # Step 3: Create a new branch for version update
+      # - name: Create new branch for version update
+      #   run: |
+      #     git checkout -b ${{ env.BRANCH_NAME }}
 
-      # Step 4: Update version file
+           # Step 4: Update version file
       - name: Update version file
         run: |
           echo "${{ env.TAG_VERSION }}" > version/version
-          git add version/version
-          git commit -m "Update version to ${{ env.TAG_VERSION }}"
 
-      # Step 5: Push the new branch to the repository
-      - name: Push to repository
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # 使用 GITHUB_TOKEN 进行身份验证
-        run: |
-          git push origin ${{ env.BRANCH_NAME }}
+      # # Step 4: Update version file
+      # - name: Update version file
+      #   run: |
+      #     echo "${{ env.TAG_VERSION }}" > version/version
+      #     git add version/version
+      #     git commit -m "Update version to ${{ env.TAG_VERSION }}"
+
+      # # Step 5: Push the new branch to the repository
+      # - name: Push to repository
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # 使用 GITHUB_TOKEN 进行身份验证
+      #   run: |
+      #     git push origin ${{ env.BRANCH_NAME }}
 
       # Step 6: Create a Pull Request from the new branch to the original repository
       - name: Create Pull Request
+        id: create_pr
         uses: peter-evans/create-pull-request@v7.0.1
         with:
-          # token: ${{ secrets.GITHUB_TOKEN }} 
-          token: ${{ secrets.BOT_TOKEN }} 
+          token: ${{ secrets.GITHUB_TOKEN }} 
+          # token: ${{ secrets.BOT_TOKEN }} 
           commit-message: "Update version to ${{ env.TAG_VERSION }}"
           branch: ${{ env.BRANCH_NAME }}
           base: main  # 原始仓库的目标分支
