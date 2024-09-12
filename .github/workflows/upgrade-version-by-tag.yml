@@ -84,6 +84,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: openimsdk/actions-test  # 替换为正确的仓库
+          fetch-depth: 0
 
       # Step 2: Set up Git with official account
       - name: Set up Git
@@ -91,43 +92,43 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      # Step 3: Add remote pointing to the forked repository
-      - name: Add fork remote
-        run: |
-          git remote add fork https://github.com/official-account/actions-test-fork.git  # 替换为官方账号的 fork 仓库
-          git fetch fork
+    #   # Step 3: Add remote pointing to the forked repository
+    #   - name: Add fork remote
+    #     run: |
+    #       git remote add fork https://github.com/github-actions[bot]/actions-test-fork.git  # 替换为官方账号的 fork 仓库
+    #       git fetch fork
 
-      # Step 4: Create a new branch in the fork
-      - name: Create new branch for version update
-        run: |
-          TAG_VERSION=${GITHUB_REF#refs/tags/}
-          BRANCH_NAME="update-version-${TAG_VERSION}"
-          git checkout -b $BRANCH_NAME
+    #   # Step 4: Create a new branch in the fork
+    #   - name: Create new branch for version update
+    #     run: |
+    #       TAG_VERSION=${GITHUB_REF#refs/tags/}
+    #       BRANCH_NAME="update-version-${TAG_VERSION}"
+    #       git checkout -b $BRANCH_NAME
 
-      # Step 5: Update version file
-      - name: Update version file
-        run: |
-          TAG_VERSION=${GITHUB_REF#refs/tags/}
-          echo "$TAG_VERSION" > version/version
-          git add version/version
-          git commit -m "Update version to $TAG_VERSION"
+    #   # Step 5: Update version file
+    #   - name: Update version file
+    #     run: |
+    #       TAG_VERSION=${GITHUB_REF#refs/tags/}
+    #       echo "$TAG_VERSION" > version/version
+    #       git add version/version
+    #       git commit -m "Update version to $TAG_VERSION"
 
-      # Step 6: Push the new branch to the forked repository
-      - name: Push to forked repository
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # 使用 GITHUB_TOKEN 进行身份验证
-        run: |
-          TAG_VERSION=${GITHUB_REF#refs/tags/}
-          BRANCH_NAME="update-version-${TAG_VERSION}"
-          git push fork $BRANCH_NAME
+    #   # Step 6: Push the new branch to the forked repository
+    #   - name: Push to forked repository
+    #     env:
+    #       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # 使用 GITHUB_TOKEN 进行身份验证
+    #     run: |
+    #       TAG_VERSION=${GITHUB_REF#refs/tags/}
+    #       BRANCH_NAME="update-version-${TAG_VERSION}"
+    #       git push fork $BRANCH_NAME
 
       # Step 7: Create a Pull Request from the fork to the original repository
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v7.0.1
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}  # 使用 GITHUB_TOKEN 进行身份验证
-        #   repository: openimsdk/actions-test  # 设置为目标仓库 openimsdk/actions-test
-          branch: official-account:$BRANCH_NAME  # Fork 仓库中的分支
-          base: main  # 原始仓库的目标分支
+          token: ${{ secrets.GITHUB_TOKEN }} 
+          commit-message: "Update version to $TAG_VERSION"
+          branch: $BRANCH_NAME
+        #   base: main  # 原始仓库的目标分支
           title: "Update version to $TAG_VERSION"
           body: "This PR updates the version file to the new tag version $TAG_VERSION."
