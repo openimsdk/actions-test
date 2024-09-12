@@ -129,6 +129,6 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }} 
           commit-message: "Update version to $TAG_VERSION"
           branch: $BRANCH_NAME
-        #   base: main  # 原始仓库的目标分支
+          base: main  # 原始仓库的目标分支
           title: "Update version to $TAG_VERSION"
           body: "This PR updates the version file to the new tag version $TAG_VERSION."
