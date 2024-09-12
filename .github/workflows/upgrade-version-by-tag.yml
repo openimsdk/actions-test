@@ -1,0 +1,52 @@
+name: Upgrade version by tag
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  upgrade_version:
+    runs-on: ubuntu-latest
+    steps:
+      # Step 1: Checkout code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Step 2: Set up Git
+      - name: Set up Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      # Step 3: Create a new branch
+      - name: Create new branch for version update
+        run: |
+          TAG_VERSION=${GITHUB_REF#refs/tags/}
+          BRANCH_NAME="update-version-${TAG_VERSION}"
+          git checkout -b $BRANCH_NAME
+
+      # Step 4: Update version file
+      - name: Update version file
+        run: |
+          TAG_VERSION=${GITHUB_REF#refs/tags/}
+          echo "$TAG_VERSION" > version/version
+          git add version/version
+          git commit -m "Update version to $TAG_VERSION"
+
+      # Step 5: Push the new branch
+      - name: Push branch
+        run: |
+          TAG_VERSION=${GITHUB_REF#refs/tags/}
+          BRANCH_NAME="update-version-${TAG_VERSION}"
+          git push origin $BRANCH_NAME
+
+      # Step 6: Create Pull Request
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: $BRANCH_NAME
+          title: "Update version to $TAG_VERSION"
+          body: "This PR updates the version file to the new tag version $TAG_VERSION."
+          base: main  # Replace 'main' with your default branch if necessary
