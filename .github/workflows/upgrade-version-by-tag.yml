@@ -1,68 +1,3 @@
-# name: Upgrade version by tag
-
-# on:
-#   push:
-#     tags:
-#       - 'v*.*.*'
-
-# jobs:
-#   upgrade_version:
-#     runs-on: ubuntu-latest
-#     steps:
-#       # Step 1: Checkout code
-#       - name: Checkout code
-#         uses: actions/checkout@v4
-#         with:
-#           repository: openimsdk/actions-test
-
-#       # Step 2: Set up Git
-#       - name: Set up Git
-#         run: |
-#           git config user.name "github-actions[bot]"
-#           git config user.email "github-actions[bot]@users.noreply.github.com"
-
-#      # Step 4: Add a remote pointing to the forked repository
-#       - name: Add fork remote
-#         run: |
-#             git remote add fork https://github.com/openimsdk/actions-test.git 
-#             git fetch fork
-    
-#     #   # Step 3: Create a new branch
-#     #   - name: Create new branch for version update
-#     #     run: |
-#     #       TAG_VERSION=${GITHUB_REF#refs/tags/}
-#     #       BRANCH_NAME="update-version-${TAG_VERSION}"
-#     #       git checkout -b $BRANCH_NAME
-
-#       # Step 4: Update version file
-#       - name: Update version file
-#         run: |
-#           TAG_VERSION=${GITHUB_REF#refs/tags/}
-#           echo "$TAG_VERSION" > version/version
-#           git add version/version
-#           git commit -m "Update version to $TAG_VERSION"
-
-#       # Step 5: Push the new branch
-#       - name: Push branch
-#         env:
-#           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-#         run: |
-#           TAG_VERSION=${GITHUB_REF#refs/tags/}
-#           BRANCH_NAME="update-version-${TAG_VERSION}"
-#           git push fork $BRANCH_NAME
-
-#       # Step 6: Create Pull Request
-#       - name: Create Pull Request
-#         id: create_pr
-#         uses: peter-evans/create-pull-request@v7.0.1
-#         with:
-#           token: ${{ secrets.GITHUB_TOKEN }}
-#         #   repository: openimsdk/actions-test
-#           branch: github-actions[bot]:$BRANCH_NAME
-#           base: main  # Replace 'main' with your default branch if necessary
-#           title: "Update version to $TAG_VERSION"
-#           body: "This PR updates the version file to the new tag version $TAG_VERSION."
-
 name: Upgrade version by tag
 
 permissions:
@@ -72,7 +7,7 @@ permissions:
 on:
   push:
     tags:
-      - 'v*.*.*'  # 监听符合语义版本号的标签
+      - 'v*.*.*'
 
 jobs:
   upgrade_version:
