@@ -63,3 +63,15 @@ jobs:
           else
             echo "No Non-English comments found."
           fi
+
+      - name: Comment on PR if errors found
+          if: failure()  # This step runs only if the previous step fails
+          uses: peter-evans/create-or-update-comment@v3
+          with:
+            token: ${{ secrets.GITHUB_TOKEN }}  # GitHub token to post the comment
+            issue-number: ${{ github.event.pull_request.number }}  # PR number
+            body: |
+              ⚠️ Non-English comments were found in the following locations:
+              ```
+              $(cat non_english_comments.txt)
+              ```
