@@ -1,5 +1,7 @@
 name: Non-English Comments Check
-
+defaults:
+  run:
+    shell: bash
 on:
   pull_request:
     branches:
