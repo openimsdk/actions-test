@@ -69,27 +69,14 @@ jobs:
 
       - name: Comment on PR if errors found
         if: failure()  # This step runs only if the previous step fails
-        uses: actions/github-script@v6
+        uses: peter-evans/create-or-update-comment@v4.0.0
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const fs = require('fs');
-            const path = 'non_english_comments.txt';
-            const issueNumber = context.payload.pull_request.number;
-
-            if (fs.existsSync(path)) {
-              const comments = fs.readFileSync(path, 'utf8');
-              const body = `
-                ⚠️ Non-English comments were found in the following locations:
-                \`\`\`
-                ${comments}
-                \`\`\`
-              `;
-
-              await github.issues.createComment({
-                ...context.repo,
-                issue_number: issueNumber,
-                body: body
-              });
-            }
+          token: ${{ secrets.GITHUB_TOKEN }}  # GitHub token to post the comment
+          issue-number: ${{ github.event.pull_request.number }}  # PR number
+          edit-mode: replace  # This ensures that the comment is updated instead of creating a new one
+          body: |
+            ⚠️ Non-English comments were found in the following locations:
+            ```
+            $(while IFS= read -r line; do echo "$line"; done < non_english_comments.txt)
+            ```
         
