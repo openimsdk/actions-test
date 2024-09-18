@@ -14,7 +14,7 @@ jobs:
       # Directories to be excluded
       EXCLUDE_DIRS: ".git docs tests scripts assets node_modules build"
       # Files to be excluded (e.g., markdown, text files)
-      EXCLUDE_FILES: "*.md *.txt *.html *.css *.min.js *.mdx"
+      EXCLUDE_FILES: "*.md *.txt *.html *.css *.min.js *.mdx .github/pull_request_template.md"
 
     steps:
       - uses: actions/checkout@v4
@@ -31,25 +31,24 @@ jobs:
             exclude_dirs="$exclude_dirs --exclude-dir=$dir"
           done
 
-          # Process the file types to be excluded
-          exclude_files=""
-          for file in $EXCLUDE_FILES; do
-            exclude_files="$exclude_files --exclude=$file"
-          done
-
-          # Use grep to find all comments containing Non-English characters
-          # Check if the file matches the excluded patterns in EXCLUDE_FILES
-          grep -Pnr "$pattern" . $exclude_dirs $exclude_files | while read -r line ; do
-            # Extract the filename from the line
+          # Process the file types to be excluded dynamically using EXCLUDE_FILES
+          grep -Pnr "$pattern" . $exclude_dirs | while read -r line ; do
             file_name=$(echo "$line" | cut -d':' -f1)
-            
-            # Skip the file if it matches any pattern in EXCLUDE_FILES
+
+            # Check if the file matches any pattern in EXCLUDE_FILES
+            skip_file=false
             for file_pattern in $EXCLUDE_FILES; do
               if echo "$file_name" | grep -q "$file_pattern"; then
-                continue 2
+                skip_file=true
+                break
               fi
             done
-            
+
+            # If the file matches an exclude pattern, skip it
+            if [ "$skip_file" = true ]; then
+              continue
+            fi
+
             # Write the result to the non_english_comments.txt file
             echo "$line" >> non_english_comments.txt
           done || true
@@ -63,6 +62,3 @@ jobs:
           else
             echo "No Non-English comments found."
           fi
-
-      # If there are non-English comments, the CI process will terminate
-      # It will provide the specific file and line number for quick navigation
