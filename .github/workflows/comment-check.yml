@@ -55,10 +55,13 @@ jobs:
           done || true
 
       - name: Output non-English comments if found
+        id: check-comments
         run: |
           if [ -s non_english_comments.txt ]; then
             echo "Non-English comments found in the following locations:"
             cat non_english_comments.txt
+            comments=$(cat non_english_comments.txt)
+            echo "::set-output name=non_english_comments::$comments"
             exit 1  # terminate the workflow
           else
             echo "No Non-English comments found."
@@ -73,5 +76,5 @@ jobs:
             body: |
               ⚠️ Non-English comments were found in the following locations:
               ```
-              $(cat non_english_comments.txt)
+              ${{ steps.check-comments.outputs.non_english_comments }}
               ```
