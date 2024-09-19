@@ -171,12 +171,13 @@ jobs:
           fi
 
       - name: Find Comment
+        if: failure()
         uses: peter-evans/find-comment@v3.1.0
         id: fc
         with:
           issue-number: ${{ github.event.pull_request.number }}
           comment-author: 'github-actions[bot]'
-          body-includes: '⚠️ Non-English comments were found in the following locations:'
+          body-includes: Non-English comments were found in the following locations
     
       - name: Comment on PR if errors found
         if: failure()  # This step runs only if the previous step fails
