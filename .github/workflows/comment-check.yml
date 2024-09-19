@@ -164,6 +164,16 @@ jobs:
           # Initialize the variable for storing the grep output
           NON_ENGLISH_COMMENTS=""
 
+          exclude_dirs=""
+          for dir in $EXCLUDE_DIRS; do
+            exclude_dirs="$exclude_dirs --exclude-dir=$dir"
+          done
+
+          exclude_files=""
+          for file in $EXCLUDE_FILES; do
+            exclude_files="$exclude_files --exclude=$file"
+          done
+
           grep -Pnr "$pattern" .github/ $exclude_dirs $exclude_files | while read -r line ; do
             echo "$line" >> non_english_comments.txt
           done || true
