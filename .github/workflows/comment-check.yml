@@ -107,8 +107,8 @@ jobs:
           # Define the regex pattern to match Chinese characters
           pattern='[\p{Han}]'
 
-          # Get the list of files changed in this PR
-          changed_files=$(git diff --name-only origin/main)
+          # Get the list of files changed in this PR compared to the base branch
+          changed_files=$(git diff --name-only ${{ github.event.pull_request.base.sha }})
 
           # Process the directories to be excluded
           exclude_dirs=""
