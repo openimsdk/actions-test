@@ -141,7 +141,7 @@ jobs:
             fi
 
             # Use grep to find all comments containing Non-English characters
-            grep -Pn "$pattern" "$file" >> non_english_comments.txt || true
+            grep -PnH "$pattern" "$file" >> non_english_comments.txt || true
           done
 
       - name: Output non-English comments if found
