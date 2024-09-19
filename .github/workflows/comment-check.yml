@@ -147,12 +147,16 @@ jobs:
             grep_output=$(grep -PnH "$pattern" "$file" || true)
             if [ -n "$grep_output" ]; then
               echo "$grep_output" >> non_english_comments.txt  # Save to file
-              NON_ENGLISH_COMMENTS="${NON_ENGLISH_COMMENTS}${grep_output}"$'\n'  # Add actual newline character
             fi
           done
 
-          # Store the grep output in an environment variable
-          echo "NON_ENGLISH_COMMENTS=$NON_ENGLISH_COMMENTS" >> $GITHUB_ENV
+          # Store the entire content of non_english_comments.txt into an environment variable
+          if [ -f non_english_comments.txt ]; then
+            NON_ENGLISH_COMMENTS=$(cat non_english_comments.txt)
+            echo "NON_ENGLISH_COMMENTS<<EOF" >> $GITHUB_ENV
+            echo "$NON_ENGLISH_COMMENTS" >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
+          fi
 
       - name: Output non-English comments if found
         run: |
