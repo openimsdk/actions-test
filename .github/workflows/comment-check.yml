@@ -124,6 +124,10 @@ jobs:
           # Use grep to find all comments containing Non-English characters
           # Check if the file contains '.md' and skip if it does
           grep -Pnr "$pattern" . $exclude_dirs $exclude_files | while read -r line ; do
+            # # If the filename contains '.md', skip it
+            if echo "$line" | grep -q '\.md'; then
+              continue
+            fi
             # Write the result to the non_english_comments.txt file
             echo "$line" >> non_english_comments.txt
           done || true
