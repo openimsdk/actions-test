@@ -146,9 +146,6 @@ jobs:
           # Define the regex pattern to match Chinese characters
           pattern='[\p{Han}]'
 
-          # Get the list of files changed in this PR compared to the base branch
-          changed_files=$(git diff --name-only ${{ github.event.pull_request.base.sha }})
-
           # Process the directories to be excluded
           exclude_dirs=""
           for dir in $EXCLUDE_DIRS; do
@@ -162,21 +159,12 @@ jobs:
           done
 
           # Use grep to find all comments containing Non-English characters
+          # Check if the file contains '.md' and skip if it does
           grep -Pnr "$pattern" . $exclude_dirs $exclude_files | while read -r line ; do
-            # If the filename contains an excluded extension (e.g., '.md'), skip it
-            skip_file=false
-            for file_pattern in $EXCLUDE_FILES; do
-              if echo "$line" | grep -q "$file_pattern"; then
-                skip_file=true
-                break
-              fi
-            done
-
-            # Skip the file if it's in the exclusion list
-            if [ "$skip_file" = true ]; then
+            # If the filename contains '.md', skip it
+            if echo "$line" | grep -q '\.md'; then
               continue
             fi
-
             # Write the result to the non_english_comments.txt file
             echo "$line" >> non_english_comments.txt
           done || true
