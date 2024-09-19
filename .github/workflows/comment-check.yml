@@ -79,6 +79,8 @@
       #       ```
       #       $(while IFS= read -r line; do echo "$line"; done < non_english_comments.txt)
       #       ```
+
+
 name: Non-English Comments Check
 
 on:
@@ -145,18 +147,15 @@ jobs:
             # Use grep to find all comments containing Non-English characters, including file path and line numbers
             grep_output=$(grep -PnH "$pattern" "$file" || true)
             if [ -n "$grep_output" ]; then
-              # Insert a tab between file path:line number and the comment content
-              formatted_output=$(echo "$grep_output" | sed 's/:\([0-9]\+\):/\1\t/')
+              # Insert a tab after the line number, keeping the colon between the file path and line number
+              formatted_output=$(echo "$grep_output" | sed 's/^\(.*:[0-9]\+\):/\1\t/')
               echo "$formatted_output" >> non_english_comments.txt  # Save to file
             fi
           done
 
           # Store the entire content of non_english_comments.txt into an environment variable
           if [ -f non_english_comments.txt ]; then
-            NON_ENGLISH_COMMENTS=$(cat non_english_comments.txt)
-            echo "NON_ENGLISH_COMMENTS<<EOF" >> $GITHUB_ENV
-            echo "$NON_ENGLISH_COMMENTS" >> $GITHUB_ENV
-            echo "EOF" >> $GITHUB_ENV
+            echo "NON_ENGLISH_COMMENTS=$(cat non_english_comments.txt)" >> $GITHUB_ENV
           fi
 
       - name: Output non-English comments if found
