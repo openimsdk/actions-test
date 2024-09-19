@@ -67,18 +67,18 @@
 #             echo "No Non-English comments found."
 #           fi
 
-#       - name: Comment on PR if errors found
-#         if: failure()  # This step runs only if the previous step fails
-#         uses: peter-evans/create-or-update-comment@v4.0.0
-#         with:
-#           token: ${{ secrets.GITHUB_TOKEN }}  # GitHub token to post the comment
-#           issue-number: ${{ github.event.pull_request.number }}  # PR number
-#           edit-mode: replace  # This ensures that the comment is updated instead of creating a new one
-#           body: |
-#             ⚠️ Non-English comments were found in the following locations:
-#             ```
-#             $(while IFS= read -r line; do echo "$line"; done < non_english_comments.txt)
-#             ```
+      # - name: Comment on PR if errors found
+      #   if: failure()  # This step runs only if the previous step fails
+      #   uses: peter-evans/create-or-update-comment@v4.0.0
+      #   with:
+      #     token: ${{ secrets.GITHUB_TOKEN }}  # GitHub token to post the comment
+      #     issue-number: ${{ github.event.pull_request.number }}  # PR number
+      #     edit-mode: replace  # This ensures that the comment is updated instead of creating a new one
+      #     body: |
+      #       ⚠️ Non-English comments were found in the following locations:
+      #       ```
+      #       $(while IFS= read -r line; do echo "$line"; done < non_english_comments.txt)
+      #       ```
 
 name: Non-English Comments Check
 
@@ -96,12 +96,12 @@ jobs:
       # Directories to be excluded
       EXCLUDE_DIRS: ".git docs tests scripts assets node_modules build"
       # Files to be excluded
-      EXCLUDE_FILES: "*.txt *.html *.css *.min.js *.mdx"
+      EXCLUDE_FILES: "*.md *.txt *.html *.css *.min.js *.mdx"
 
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0  # Ensure the full history is fetched so git diff can work properly
 
       - name: Search for Non-English comments in PR files
         run: |
@@ -124,6 +124,9 @@ jobs:
             exclude_files="$exclude_files --exclude=$file"
           done
 
+          # Initialize the variable for storing the grep output
+          NON_ENGLISH_COMMENTS=""
+
           # Check only the files modified in this PR for non-English comments
           for file in $changed_files; do
             # Skip files matching excluded patterns
@@ -140,9 +143,16 @@ jobs:
               continue
             fi
 
-            # Use grep to find all comments containing Non-English characters
-            grep -PnH "$pattern" "$file" >> non_english_comments.txt || true
+            # Use grep to find all comments containing Non-English characters, including file path and line numbers
+            grep_output=$(grep -PnH "$pattern" "$file" || true)
+            if [ -n "$grep_output" ]; then
+              echo "$grep_output" >> non_english_comments.txt  # Save to file
+              NON_ENGLISH_COMMENTS="$NON_ENGLISH_COMMENTS$grep_output\n"  # Save to variable
+            fi
           done
+
+          # Store the grep output in an environment variable
+          echo "NON_ENGLISH_COMMENTS=$NON_ENGLISH_COMMENTS" >> $GITHUB_ENV
 
       - name: Output non-English comments if found
         run: |
@@ -153,3 +163,17 @@ jobs:
           else
             echo "No Non-English comments found."
           fi
+
+      - name: Comment on PR if errors found
+        if: failure()  # This step runs only if the previous step fails
+        uses: peter-evans/create-or-update-comment@v4.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}  # GitHub token to post the comment
+          issue-number: ${{ github.event.pull_request.number }}  # PR number
+          edit-mode: replace  # This ensures that the comment is updated instead of creating a new one
+          body: |
+            ⚠️ Non-English comments were found in the following locations:
+            ```
+            ${{ env.NON_ENGLISH_COMMENTS }}
+            ```
+
