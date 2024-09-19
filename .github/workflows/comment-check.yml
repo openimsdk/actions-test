@@ -154,7 +154,10 @@ jobs:
 
           # Store the entire content of non_english_comments.txt into an environment variable
           if [ -f non_english_comments.txt ]; then
-            echo "NON_ENGLISH_COMMENTS=$(cat non_english_comments.txt)" >> $GITHUB_ENV
+            NON_ENGLISH_COMMENTS=$(cat non_english_comments.txt)
+            echo "NON_ENGLISH_COMMENTS<<EOF" >> $GITHUB_ENV
+            echo "$NON_ENGLISH_COMMENTS" >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
           fi
 
       - name: Output non-English comments if found
@@ -173,7 +176,7 @@ jobs:
         with:
           issue-number: ${{ github.event.pull_request.number }}
           comment-author: 'github-actions[bot]'
-          body-includes: ⚠️ Non-English comments were found in the following locations
+          body-includes: Non-English comments were found in the following locations
     
       - name: Comment on PR if errors found
         if: failure()  # This step runs only if the previous step fails
