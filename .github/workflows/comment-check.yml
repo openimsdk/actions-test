@@ -96,7 +96,7 @@ jobs:
       # Directories to be excluded
       EXCLUDE_DIRS: ".git docs tests scripts assets node_modules build"
       # Files to be excluded
-      EXCLUDE_FILES: "*.md *.txt *.html *.css *.min.js *.mdx"
+      EXCLUDE_FILES: ".md .txt .html .css .min.js .mdx"
 
     steps:
       - uses: actions/checkout@v4
