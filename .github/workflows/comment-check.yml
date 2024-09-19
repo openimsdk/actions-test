@@ -162,15 +162,34 @@ jobs:
           done
 
           # Use grep to find all comments containing Non-English characters
-          # Check if the file contains '.md' and skip if it does
           grep -Pnr "$pattern" . $exclude_dirs $exclude_files | while read -r line ; do
-            # If the filename contains '.md', skip it
-            if echo "$line" | grep -q '\.md'; then
+            # Loop through EXCLUDE_FILES and skip any file that matches the excluded patterns
+            skip_file=false
+            for file_pattern in $EXCLUDE_FILES; do
+              if echo "$line" | grep -q "$file_pattern"; then
+                skip_file=true
+                break
+              fi
+            done
+                  
+            # If the file matches an excluded pattern, skip it
+            if [ "$skip_file" = true ]; then
               continue
             fi
+                  
             # Write the result to the non_english_comments.txt file
             echo "$line" >> non_english_comments.txt
           done || true
+          
+          # # Use grep to find all comments containing Non-English characters
+          # grep -Pnr "$pattern" . $exclude_dirs $exclude_files | while read -r line ; do
+          #   # If the filename contains '.md', skip it
+          #   if echo "$line" | grep -q '\.md'; then
+          #     continue
+          #   fi
+          #   # Write the result to the non_english_comments.txt file
+          #   echo "$line" >> non_english_comments.txt
+          # done || true
 
           # Store the entire content of non_english_comments.txt into an environment variable
           if [ -f non_english_comments.txt ]; then
