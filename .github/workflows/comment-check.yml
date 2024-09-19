@@ -147,7 +147,7 @@ jobs:
             grep_output=$(grep -PnH "$pattern" "$file" || true)
             if [ -n "$grep_output" ]; then
               echo "$grep_output" >> non_english_comments.txt  # Save to file
-               NON_ENGLISH_COMMENTS="$NON_ENGLISH_COMMENTS$(echo "$grep_output" | sed 's/$/  /')\n"  # Save to variable with Markdown formatting
+              NON_ENGLISH_COMMENTS="$NON_ENGLISH_COMMENTS$grep_output\n"  # Save to variable without any modification
             fi
           done
 
@@ -176,4 +176,3 @@ jobs:
             ```
             ${{ env.NON_ENGLISH_COMMENTS }}
             ```
-
