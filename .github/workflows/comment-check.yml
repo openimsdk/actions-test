@@ -1,3 +1,85 @@
+# name: Non-English Comments Check
+
+# on:
+#   pull_request:
+#     branches:
+#       - main
+#   workflow_dispatch:
+
+# jobs:
+#   non-english-comments-check:
+#     runs-on: ubuntu-latest
+
+#     env:
+#       # Directories to be excluded
+#       EXCLUDE_DIRS: ".git docs tests scripts assets node_modules build"
+#       # Files to be excluded (e.g., markdown, text files)
+#       EXCLUDE_FILES: "*.md *.txt *.html *.css *.min.js *.mdx"
+
+#     steps:
+#       - uses: actions/checkout@v4
+
+#       - name: Search for Non-English comments
+#         run: |
+#           set -e
+#           # Define the regex pattern to match Chinese characters
+#           pattern='[\p{Han}]'
+
+#           # Process the directories to be excluded
+#           exclude_dirs=""
+#           for dir in $EXCLUDE_DIRS; do
+#             exclude_dirs="$exclude_dirs --exclude-dir=$dir"
+#           done
+
+#           # Use grep to find all comments containing Non-English characters
+#           grep -Pnr "$pattern" . $exclude_dirs | while read -r line ; do
+#             file_name=$(echo "$line" | cut -d':' -f1)
+
+#             # Check if the file matches any pattern in EXCLUDE_FILES
+#             skip_file=false
+#             for file_pattern in $EXCLUDE_FILES; do
+#               # Use echo and grep to match the file name with the pattern
+#               if echo "$file_name" | grep -q "$file_pattern"; then
+#                 skip_file=true
+#                 break
+#               fi
+#             done
+
+#             # If the file matches an exclude pattern, skip it
+#             if [ "$skip_file" = true ]; then
+#               continue
+#             fi
+
+#             # Write the result to the non_english_comments.txt file
+#             echo "$line" >> non_english_comments.txt
+#           done || true
+
+#       - name: Output non-English comments if found
+#         id: check-comments
+#         run: |
+#           if [ -s non_english_comments.txt ]; then
+#             echo "Non-English comments found in the following locations:"
+#             cat non_english_comments.txt
+#             comments=$(cat non_english_comments.txt | sed ':a;N;$!ba;s/\n/\\n/g')
+#             echo "non_english_comments=$comments" >> $GITHUB_ENV
+#             exit 1  # terminate the workflow
+#           else
+#             echo "No Non-English comments found."
+#           fi
+
+#       - name: Comment on PR if errors found
+#         if: failure()  # This step runs only if the previous step fails
+#         uses: peter-evans/create-or-update-comment@v4.0.0
+#         with:
+#           token: ${{ secrets.GITHUB_TOKEN }}  # GitHub token to post the comment
+#           issue-number: ${{ github.event.pull_request.number }}  # PR number
+#           edit-mode: replace  # This ensures that the comment is updated instead of creating a new one
+#           body: |
+#             ⚠️ Non-English comments were found in the following locations:
+#             ```
+#             $(while IFS= read -r line; do echo "$line"; done < non_english_comments.txt)
+#             ```
+
 name: Non-English Comments Check
 
 on:
@@ -13,17 +95,20 @@ jobs:
     env:
       # Directories to be excluded
       EXCLUDE_DIRS: ".git docs tests scripts assets node_modules build"
-      # Files to be excluded (e.g., markdown, text files)
-      EXCLUDE_FILES: "*.md *.txt *.html *.css *.min.js *.mdx"
+      # Files to be excluded
+      EXCLUDE_FILES: "*.txt *.html *.css *.min.js *.mdx"
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Search for Non-English comments
+      - name: Search for Non-English comments in PR files
         run: |
           set -e
           # Define the regex pattern to match Chinese characters
           pattern='[\p{Han}]'
+
+          # Get the list of files changed in this PR
+          changed_files=$(git diff --name-only origin/main)
 
           # Process the directories to be excluded
           exclude_dirs=""
@@ -31,15 +116,18 @@ jobs:
             exclude_dirs="$exclude_dirs --exclude-dir=$dir"
           done
 
-          # Use grep to find all comments containing Non-English characters
-          grep -Pnr "$pattern" . $exclude_dirs | while read -r line ; do
-            file_name=$(echo "$line" | cut -d':' -f1)
+          # Process the file types to be excluded
+          exclude_files=""
+          for file in $EXCLUDE_FILES; do
+            exclude_files="$exclude_files --exclude=$file"
+          done
 
-            # Check if the file matches any pattern in EXCLUDE_FILES
+          # Check only the files modified in this PR for non-English comments
+          for file in $changed_files; do
+            # Skip files matching excluded patterns
             skip_file=false
             for file_pattern in $EXCLUDE_FILES; do
-              # Use echo and grep to match the file name with the pattern
-              if echo "$file_name" | grep -q "$file_pattern"; then
+              if echo "$file" | grep -q "$file_pattern"; then
                 skip_file=true
                 break
               fi
@@ -50,33 +138,16 @@ jobs:
               continue
             fi
 
-            # Write the result to the non_english_comments.txt file
-            echo "$line" >> non_english_comments.txt
-          done || true
+            # Use grep to find all comments containing Non-English characters
+            grep -Pn "$pattern" "$file" >> non_english_comments.txt || true
+          done
 
       - name: Output non-English comments if found
-        id: check-comments
         run: |
           if [ -s non_english_comments.txt ]; then
             echo "Non-English comments found in the following locations:"
             cat non_english_comments.txt
-            comments=$(cat non_english_comments.txt | sed ':a;N;$!ba;s/\n/\\n/g')
-            echo "non_english_comments=$comments" >> $GITHUB_ENV
             exit 1  # terminate the workflow
           else
             echo "No Non-English comments found."
           fi
-
-      - name: Comment on PR if errors found
-        if: failure()  # This step runs only if the previous step fails
-        uses: peter-evans/create-or-update-comment@v4.0.0
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}  # GitHub token to post the comment
-          issue-number: ${{ github.event.pull_request.number }}  # PR number
-          edit-mode: replace  # This ensures that the comment is updated instead of creating a new one
-          body: |
-            ⚠️ Non-English comments were found in the following locations:
-            ```
-            $(while IFS= read -r line; do echo "$line"; done < non_english_comments.txt)
-            ```
-        
