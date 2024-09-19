@@ -97,7 +97,7 @@ jobs:
       EXCLUDE_DIRS: ".git docs tests scripts assets node_modules build"
       # Files to be excluded
       # EXCLUDE_FILES: "*.md *.txt *.html *.css *.min.js *.mdx"
-      EXCLUDE_FILES: ".md .txt .html .css .min.js .mdx"
+      EXCLUDE_TYPES: ".md .txt .html .css .min.js .mdx"
 
     steps:
       - uses: actions/checkout@v4
@@ -156,17 +156,17 @@ jobs:
             exclude_dirs="$exclude_dirs --exclude-dir=$dir"
           done
 
-          # # Process the file types to be excluded
-          # exclude_files=""
-          # for file in $EXCLUDE_FILES; do
-          #   exclude_files="$exclude_files --exclude=$file"
-          # done
+          # Process the file types to be excluded
+          exclude_files=""
+          for file in $EXCLUDE_FILES; do
+            exclude_files="$exclude_files --exclude=$file"
+          done
 
           # Use grep to find all comments containing Non-English characters
-          grep -Pnr "$pattern" . $exclude_dirs | while read -r line ; do
+          grep -Pnr "$pattern" . $exclude_dirs $exclude_files | while read -r line ; do
             # Loop through EXCLUDE_FILES and skip any file that matches the excluded patterns
             skip_file=false
-            for file_pattern in $EXCLUDE_FILES; do
+            for file_pattern in $EXCLUDE_TYPES; do
               if echo "$line" | grep -q "\$file_pattern"; then
                 skip_file=true
                 break
