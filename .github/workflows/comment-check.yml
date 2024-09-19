@@ -142,6 +142,9 @@ jobs:
 
       - name: Search for Non-English comments in PR diff files
         run: |
+          # Get the list of files changed in this PR compared to the base branch
+          changed_files=$(git diff --name-only ${{ github.event.pull_request.base.sha }})
+
           set -e
           # Define the regex pattern to match Chinese characters
           pattern='[\p{Han}]'
