@@ -96,8 +96,7 @@ jobs:
       # Directories to be excluded
       EXCLUDE_DIRS: ".git docs tests scripts assets node_modules build"
       # Files to be excluded
-      # EXCLUDE_FILES: "*.md *.txt *.html *.css *.min.js *.mdx"
-      EXCLUDE_TYPES: ".md .txt .html .css .min.js .mdx"
+      EXCLUDE_FILES: "*.md *.txt *.html *.css *.min.js *.mdx"
 
     steps:
       - uses: actions/checkout@v4
@@ -143,55 +142,55 @@ jobs:
 
       - name: Search for Non-English comments in PR diff files
         run: |
-          # Get the list of files changed in this PR compared to the base branch
-          changed_files=$(git diff --name-only ${{ github.event.pull_request.base.sha }})
-
           set -e
           # Define the regex pattern to match Chinese characters
           pattern='[\p{Han}]'
-
-          # Process the directories to be excluded
-          exclude_dirs=""
-          for dir in $EXCLUDE_DIRS; do
-            exclude_dirs="$exclude_dirs --exclude-dir=$dir"
-          done
-
-          # Process the file types to be excluded
-          exclude_files=""
-          for file in $EXCLUDE_FILES; do
-            exclude_files="$exclude_files --exclude=$file"
-          done
-
-          # Use grep to find all comments containing Non-English characters
-          grep -Pnr "$pattern" . $exclude_dirs $exclude_files | while read -r line ; do
-            # Loop through EXCLUDE_FILES and skip any file that matches the excluded patterns
+           
+          # Directories to be excluded
+          exclude_dirs=".git docs tests scripts assets node_modules build"
+          # Files to be excluded
+          exclude_files=".md .txt .html .css .min.js .mdx"
+           
+          # Get the list of files changed in this PR compared to the base branch
+          changed_files=$(git diff --name-only ${{ github.event.pull_request.base.sha }})
+           
+          # Convert EXCLUDE_DIRS and EXCLUDE_FILES to arrays
+          exclude_dirs_array=($exclude_dirs)
+          exclude_files_array=($exclude_files)
+           
+          # Loop over each changed file
+          for file in $changed_files; do
+            # Skip files in excluded directories
             skip_file=false
-            for file_pattern in $EXCLUDE_TYPES; do
-              if echo "$line" | grep -q "\$file_pattern"; then
+            for dir in "${exclude_dirs_array[@]}"; do
+              if [[ "$file" == $dir/* ]]; then
                 skip_file=true
                 break
               fi
             done
-                  
-            # If the file matches an excluded pattern, skip it
+           
+            # Skip files matching excluded patterns
+            for file_pattern in "${exclude_files_array[@]}"; do
+              if [[ "$file" == *$file_pattern ]]; then
+                skip_file=true
+                break
+              fi
+            done
+           
+            # If the file matches any exclude pattern, skip it
             if [ "$skip_file" = true ]; then
               continue
             fi
-                  
-            # Write the result to the non_english_comments.txt file
-            echo "$line" >> non_english_comments.txt
-          done || true
-          
-          # # Use grep to find all comments containing Non-English characters
-          # grep -Pnr "$pattern" . $exclude_dirs $exclude_files | while read -r line ; do
-          #   # If the filename contains '.md', skip it
-          #   if echo "$line" | grep -q '\.md'; then
-          #     continue
-          #   fi
-          #   # Write the result to the non_english_comments.txt file
-          #   echo "$line" >> non_english_comments.txt
-          # done || true
-
+           
+            # Use grep to find all comments containing Non-English characters in filtered files
+            grep_output=$(grep -PnH "$pattern" "$file" || true)
+            if [ -n "$grep_output" ]; then
+              # Insert a tab after the line number, keeping the colon between the file path and line number
+              formatted_output=$(echo "$grep_output" | sed 's/^\(.*:[0-9]\+\):/\1\t/')
+              echo "$formatted_output" >> non_english_comments.txt  # Save to file
+            fi
+          done
+           
           # Store the entire content of non_english_comments.txt into an environment variable
           if [ -f non_english_comments.txt ]; then
             NON_ENGLISH_COMMENTS=$(cat non_english_comments.txt)
@@ -199,6 +198,7 @@ jobs:
             echo "$NON_ENGLISH_COMMENTS" >> $GITHUB_ENV
             echo "EOF" >> $GITHUB_ENV
           fi
+    
 
       - name: Output non-English comments if found
         run: |
@@ -233,3 +233,49 @@ jobs:
             ${{ env.NON_ENGLISH_COMMENTS }}
             ```
 
+
+
+
+
+# - name: Search for Non-English comments in PR using find
+  # run: |
+  #   set -e
+  #   # Define the regex pattern to match Chinese characters
+  #   pattern='[\p{Han}]'
+
+  #   # Directories to be excluded
+  #   exclude_dirs=".git docs tests scripts assets node_modules build"
+  #   # Files to be excluded
+  #   exclude_files=".md .txt .html .css .min.js .mdx"
+
+  #   # Convert EXCLUDE_DIRS and EXCLUDE_FILES to arrays
+  #   exclude_dirs_array=($exclude_dirs)
+  #   exclude_files_array=($exclude_files)
+
+  #   # Build the find command dynamically with the exclude directories and files
+  #   find_command="find . -type f"
+  #   for dir in "${exclude_dirs_array[@]}"; do
+  #     find_command="$find_command ! -path \"./$dir/*\""
+  #   done
+  #   for file_pattern in "${exclude_files_array[@]}"; do
+  #     find_command="$find_command ! -name \"*$file_pattern\""
+  #   done
+
+  #   # Execute the find command and pass the results to grep
+  #   eval $find_command | while read file; do
+  #     # Use grep to find all comments containing Non-English characters in filtered files
+  #     grep_output=$(grep -PnH "$pattern" "$file" || true)
+  #     if [ -n "$grep_output" ]; then
+  #       # Insert a tab after the line number, keeping the colon between the file path and line number
+  #       formatted_output=$(echo "$grep_output" | sed 's/^\(.*:[0-9]\+\):/\1\t/')
+  #       echo "$formatted_output" >> non_english_comments.txt  # Save to file
+  #     fi
+  #   done
+
+  #   # Store the entire content of non_english_comments.txt into an environment variable
+  #   if [ -f non_english_comments.txt ]; then
+  #     NON_ENGLISH_COMMENTS=$(cat non_english_comments.txt)
+  #     echo "NON_ENGLISH_COMMENTS<<EOF" >> $GITHUB_ENV
+  #     echo "$NON_ENGLISH_COMMENTS" >> $GITHUB_ENV
+  #     echo "EOF" >> $GITHUB_ENV
+  #   fi
