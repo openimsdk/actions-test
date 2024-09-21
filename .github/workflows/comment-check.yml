@@ -25,7 +25,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.ref }}
+          ref: ${{ github.event.pull_request.head.ref }}  # 检出 fork 仓库的分支
+          repository: ${{ github.event.pull_request.head.repo.full_name }}  # 确保拉取的是fork仓库的内容
           fetch-depth: 0 
 
       - name: Search for Non-English comments in the entire repository
