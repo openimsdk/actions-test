@@ -7,9 +7,10 @@ on:
       - main
   workflow_dispatch:
 
+## true test 爱来自瓷器
+
 jobs:
   non-english-comments-check:
-    # if: github.event.pull_request.base.ref == 'main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -24,6 +25,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.ref }}  # 检出 fork 仓库的分支
+          repository: ${{ github.event.pull_request.head.repo.full_name }}  # 确保拉取的是fork仓库的内容
           fetch-depth: 0 
 
       - name: Search for Non-English comments in the entire repository
@@ -153,5 +156,8 @@ jobs:
             ```
             ${{ env.NON_ENGLISH_COMMENTS }}
             ```
-
-            ### 这就是中文的含金量
+            
+            ### true test 这就是中文的含金量
+            
+## true test 爱来自瓷器
+  ### 这就是中文的含金量
