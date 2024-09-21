@@ -7,7 +7,7 @@ on:
       - main
   workflow_dispatch:
 
-## true test 爱来自瓷器
+## true test 爱来自瓷器1
 
 jobs:
   non-english-comments-check:
@@ -25,63 +25,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.ref }}  # 检出 fork 仓库的分支
-          repository: ${{ github.event.pull_request.head.repo.full_name }}  # 确保拉取的是fork仓库的内容
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
           fetch-depth: 0 
 
-      - name: Search for Non-English comments in the entire repository
-        run: |
-          set -e
-          # Define the regex pattern to match Chinese characters
-          pattern='[\p{Han}]'
-      
-          # Use find to get all files in the repository
-          all_files=$(find . -type f)
-      
-          # Loop over each file in the repository
-          for file in $all_files; do
-            # Skip files in excluded directories
-            skip_file=false
-            for dir in ${EXCLUDE_DIRS}; do
-              if [[ "$file" == ./$dir/* ]]; then
-                skip_file=true
-                break
-              fi
-            done
-      
-            # Skip files matching excluded patterns
-            for file_pattern in ${EXCLUDE_FILES}; do
-              if [[ "$file" == *$file_pattern ]]; then
-                skip_file=true
-                break
-              fi
-            done
-      
-            # If the file matches any exclude pattern, skip it
-            if [ "$skip_file" = true ]; then
-              continue
-            fi
-      
-            # Use grep to find all comments containing Non-English characters in filtered files
-            grep_output=$(grep -PnH "$pattern" "$file" || true)
-            if [ -n "$grep_output" ]; then
-              # Insert a tab after the line number, keeping the colon between the file path and line number
-              formatted_output=$(echo "$grep_output" | sed 's/^\(.*:[0-9]\+\):/\1\t/')
-              echo "$formatted_output" >> non_english_comments.txt  # Save to file
-            fi
-          done
-
-      # - name: Search for Non-English comments in PR diff files
+      # - name: Search for Non-English comments in the entire repository
       #   run: |
       #     set -e
       #     # Define the regex pattern to match Chinese characters
       #     pattern='[\p{Han}]'
-            
-      #     # Get the list of files changed in this PR compared to the base branch
-      #     changed_files=$(git diff --name-only ${{ github.event.pull_request.base.sha }})
-            
-      #     # Loop over each changed file
-      #     for file in $changed_files; do
+      
+      #     # Use find to get all files in the repository
+      #     all_files=$(find . -type f)
+      
+      #     # Loop over each file in the repository
+      #     for file in $all_files; do
       #       # Skip files in excluded directories
       #       skip_file=false
       #       for dir in ${EXCLUDE_DIRS}; do
@@ -90,7 +48,7 @@ jobs:
       #           break
       #         fi
       #       done
-       
+      
       #       # Skip files matching excluded patterns
       #       for file_pattern in ${EXCLUDE_FILES}; do
       #         if [[ "$file" == *$file_pattern ]]; then
@@ -98,12 +56,12 @@ jobs:
       #           break
       #         fi
       #       done
-       
+      
       #       # If the file matches any exclude pattern, skip it
       #       if [ "$skip_file" = true ]; then
       #         continue
       #       fi
-       
+      
       #       # Use grep to find all comments containing Non-English characters in filtered files
       #       grep_output=$(grep -PnH "$pattern" "$file" || true)
       #       if [ -n "$grep_output" ]; then
@@ -112,6 +70,48 @@ jobs:
       #         echo "$formatted_output" >> non_english_comments.txt  # Save to file
       #       fi
       #     done
+
+      - name: Search for Non-English comments in PR diff files
+        run: |
+          set -e
+          # Define the regex pattern to match Chinese characters
+          pattern='[\p{Han}]'
+            
+          # Get the list of files changed in this PR compared to the base branch
+          changed_files=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }})
+            
+          # Loop over each changed file
+          for file in $changed_files; do
+            # Skip files in excluded directories
+            skip_file=false
+            for dir in ${EXCLUDE_DIRS}; do
+              if [[ "$file" == ./$dir/* ]]; then
+                skip_file=true
+                break
+              fi
+            done
+       
+            # Skip files matching excluded patterns
+            for file_pattern in ${EXCLUDE_FILES}; do
+              if [[ "$file" == *$file_pattern ]]; then
+                skip_file=true
+                break
+              fi
+            done
+       
+            # If the file matches any exclude pattern, skip it
+            if [ "$skip_file" = true ]; then
+              continue
+            fi
+       
+            # Use grep to find all comments containing Non-English characters in filtered files
+            grep_output=$(grep -PnH "$pattern" "$file" || true)
+            if [ -n "$grep_output" ]; then
+              # Insert a tab after the line number, keeping the colon between the file path and line number
+              formatted_output=$(echo "$grep_output" | sed 's/^\(.*:[0-9]\+\):/\1\t/')
+              echo "$formatted_output" >> non_english_comments.txt  # Save to file
+            fi
+          done
         
       - name: Store non-English comments in ENV
         run: |
