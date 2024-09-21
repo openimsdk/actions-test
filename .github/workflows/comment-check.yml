@@ -9,7 +9,6 @@ on:
 
 jobs:
   non-english-comments-check:
-    # if: github.event.pull_request.base.ref == 'main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -156,5 +155,5 @@ jobs:
             
             ### 这就是中文的含金量
             
-   ## true test 爱来自瓷器
+## true test 爱来自瓷器
   ### 这就是中文的含金量
