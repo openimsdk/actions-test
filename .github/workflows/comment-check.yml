@@ -78,7 +78,7 @@ jobs:
           pattern='[\p{Han}]'
             
           # Get the list of files changed in this PR compared to the base branch
-          changed_files=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }})
+          changed_files=$(git diff --name-only ${{ github.event.pull_request.head.sha }})
             
           # Loop over each changed file
           for file in $changed_files; do
