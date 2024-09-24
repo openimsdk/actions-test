@@ -1,16 +1,19 @@
 name: Non-English Comments Check
 
 on:
-  pull_request:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
     branches:
       - main
   workflow_dispatch:
+
+## true test 爱来自瓷器1
 
 jobs:
   non-english-comments-check:
     runs-on: ubuntu-latest
     permissions:
-      issues: write
+      contents: read
       pull-requests: write
 
     env:
@@ -22,6 +25,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
           fetch-depth: 0 
 
       - name: Search for Non-English comments in the entire repository
@@ -73,7 +78,7 @@ jobs:
       #     pattern='[\p{Han}]'
             
       #     # Get the list of files changed in this PR compared to the base branch
-      #     changed_files=$(git diff --name-only ${{ github.event.pull_request.base.sha }})
+      #     changed_files=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }})
             
       #     # Loop over each changed file
       #     for file in $changed_files; do
@@ -129,7 +134,7 @@ jobs:
           fi
 
       - name: Find Comment
-        if: failure()
+        if: failure() && github.event_name != 'workflow_dispatch'
         uses: peter-evans/find-comment@v3.1.0
         id: fc
         with:
@@ -138,7 +143,7 @@ jobs:
           body-includes: Non-English comments were found in the following locations
     
       - name: Comment on PR if errors found
-        if: failure()  # This step runs only if the previous step fails
+        if: failure() && github.event_name != 'workflow_dispatch'  # This step runs only if the previous step fails
         uses: peter-evans/create-or-update-comment@v4.0.0
         with:
           # token: ${{ secrets.GITHUB_TOKEN }}  # GitHub token to post the comment
@@ -151,3 +156,12 @@ jobs:
             ```
             ${{ env.NON_ENGLISH_COMMENTS }}
             ```
+
+
+## true test 爱来自瓷器
+  ### 这就是中文的含金量
+  
+# 现在测试的只有diff , no include entire repo
+
+
+# 再加一点改动后的情况 bot 会是edited
