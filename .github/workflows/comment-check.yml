@@ -159,7 +159,11 @@ jobs:
             ${{ env.NON_ENGLISH_COMMENTS }}
             ```
             
-            ### true test 这就是中文的含金量
             
 ## true test 爱来自瓷器
   ### 这就是中文的含金量
+  
+# 现在测试的只有diff , no include entire repo
+
+
+# 再加一点改动后的情况 bot 会是edited
