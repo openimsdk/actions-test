@@ -79,7 +79,6 @@ jobs:
             
       #     # Get the list of files changed in this PR compared to the base branch
       #     changed_files=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }})
-
             
       #     # Loop over each changed file
       #     for file in $changed_files; do
@@ -113,7 +112,6 @@ jobs:
       #         echo "$formatted_output" >> non_english_comments.txt  # Save to file
       #       fi
       #     done
-
         
       - name: Store non-English comments in ENV
         run: |
@@ -158,8 +156,8 @@ jobs:
             ```
             ${{ env.NON_ENGLISH_COMMENTS }}
             ```
-            
-            
+
+
 ## true test 爱来自瓷器
   ### 这就是中文的含金量
   
