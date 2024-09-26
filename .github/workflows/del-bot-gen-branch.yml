@@ -1,38 +1,38 @@
-name: Delete branch after PR merge by bot gen
+# name: Delete branch after PR merge by bot gen
 
-on:
-    pull_request:
-      types:
-        - closed  
-    workflow_dispatch:
+# on:
+#     pull_request:
+#       types:
+#         - closed  
+#     workflow_dispatch:
   
-jobs:
-    delete_branch:
-      if: ${{ github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'update-version-') && github.event.pull_request.user.login == 'github-actions[bot]' }}  # 条件：PR已合并、分支以 'update-version-' 开头、PR发起者是 github-actions[bot]
-      runs-on: ubuntu-latest
+# jobs:
+#     delete_branch:
+#       if: ${{ github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'update-version-') && github.event.pull_request.user.login == 'github-actions[bot]' }}  # 条件：PR已合并、分支以 'update-version-' 开头、PR发起者是 github-actions[bot]
+#       runs-on: ubuntu-latest
   
-      steps:
-        # Step 1: Checkout the repository to get into the Git directory
-        - name: Checkout repository
-          uses: actions/checkout@v4
-          with:
-            token: ${{ secrets.GITHUB_TOKEN }}
-            fetch-depth: 0 
+#       steps:
+#         # Step 1: Checkout the repository to get into the Git directory
+#         - name: Checkout repository
+#           uses: actions/checkout@v4
+#           with:
+#             token: ${{ secrets.GITHUB_TOKEN }}
+#             fetch-depth: 0 
   
-        # Step 2: Set up Git user
-        - name: Set up Git
-          run: |
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
+#         # Step 2: Set up Git user
+#         - name: Set up Git
+#           run: |
+#             git config user.name "github-actions[bot]"
+#             git config user.email "github-actions[bot]@users.noreply.github.com"
   
-        # Step 3: Delete the branch that was used for the PR
-        - name: Delete branch
-          env:
-            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-            BRANCH_TO_DELETE: ${{ github.event.pull_request.head.ref }}  # 使用env变量存储待删除的分支名称
-          run: |
-            if [[ "$BRANCH_TO_DELETE" != "main" ]];; then
-              git push origin --delete "$BRANCH_TO_DELETE"
-              echo "Branch '$BRANCH_TO_DELETE' deleted."
-            else
-              echo "Cannot delete 'main' branch."
+#         # Step 3: Delete the branch that was used for the PR
+#         - name: Delete branch
+#           env:
+#             GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#             BRANCH_TO_DELETE: ${{ github.event.pull_request.head.ref }}  # 使用env变量存储待删除的分支名称
+#           run: |
+#             if [[ "$BRANCH_TO_DELETE" != "main" ]]; then
+#               git push origin --delete "$BRANCH_TO_DELETE"
+#               echo "Branch '$BRANCH_TO_DELETE' deleted."
+#             else
+#               echo "Cannot delete 'main' branch."
