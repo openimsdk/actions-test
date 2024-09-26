@@ -1,0 +1,38 @@
+name: Update Release with Custom Version
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # 只有符合 v*.*.* 格式的 tag 才会触发
+
+jobs:
+  update_release:
+    runs-on: ubuntu-latest
+    env:
+      TAG_VERSION: ${{ github.ref_name }}  # 获取当前 tag 版本号
+
+    steps:
+      # Step 1: Checkout the repository
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 获取所有历史记录，确保我们可以推送
+
+      # Step 2: Update version file
+      - name: Update version file
+        run: |
+          echo "${{ env.TAG_VERSION }}" > version/version  # 将 tag 写入 version 文件
+
+      # Step 3: Archive the code
+      - name: Create source archive
+        run: |
+          zip -r source-code-${{ env.TAG_VERSION }}.zip .  # 打包修改后的代码
+
+      # Step 4: Upload to the Release
+      - name: Upload modified source to release
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ github.event.release.upload_url }}  # 获取当前 Release 的上传 URL
+          asset_path: ./source-code-${{ env.TAG_VERSION }}.zip  # 上传我们刚刚创建的 zip 文件
+          asset_name: source-code-${{ env.TAG_VERSION }}.zip
+          asset_content_type: application/zip
