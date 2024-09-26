@@ -26,7 +26,7 @@ jobs:
       # Step 3: Update Version/version file
       - name: Update version file
         run: |
-          echo "${{ env.TAG_VERSION }}" > Version/version
+          echo "${{ env.TAG_VERSION }}" > version/version
 
       # Step 4: Commit and push changes
       - name: Commit and push changes
