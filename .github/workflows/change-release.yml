@@ -38,7 +38,15 @@ jobs:
           git commit -m "Update version to ${{ env.TAG_VERSION }}"
           git push origin ${{ env.BRANCH_NAME }}
 
-      # Step 5: Create and push tag
+      # Step 5: Check if tag exists and delete if it does
+      - name: Check and delete existing tag
+        run: |
+          if git rev-parse ${{ env.TAG_VERSION }} >/dev/null 2>&1; then
+            git tag -d ${{ env.TAG_VERSION }}
+            git push --delete origin ${{ env.TAG_VERSION }}
+          fi
+
+      # Step 6: Create and push tag
       - name: Create and push tag
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
