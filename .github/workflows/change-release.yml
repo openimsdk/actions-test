@@ -24,12 +24,20 @@ jobs:
                   git config user.name "github-actions[bot]"
                   git config user.email "github-actions[bot]@users.noreply.github.com"
         
-              # Step 3: Update version file
+              # Step 3: Check if tag exists and delete if it does
+              - name: Check and delete existing tag
+                run: |
+                  if git rev-parse ${{ env.TAG_VERSION }} >/dev/null 2>&1; then
+                    git tag -d ${{ env.TAG_VERSION }}
+                    git push --delete origin ${{ env.TAG_VERSION }}
+                  fi
+        
+              # Step 4: Update version file
               - name: Update version file
                 run: |
                   echo "${{ env.TAG_VERSION }}" > version/version
         
-              # Step 4: Commit and push changes
+              # Step 5: Commit and push changes
               - name: Commit and push changes
                 env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -37,14 +45,6 @@ jobs:
                   git add version/version
                   git commit -m "Update version to ${{ env.TAG_VERSION }}"
                   git push origin HEAD:${{ github.ref }}
-        
-              # Step 5: Check if tag exists and delete if it does
-              - name: Check and delete existing tag
-                run: |
-                  if git rev-parse ${{ env.TAG_VERSION }} >/dev/null 2>&1; then
-                    git tag -d ${{ env.TAG_VERSION }}
-                    git push --delete origin ${{ env.TAG_VERSION }}
-                  fi
         
               # Step 6: Create and push tag
               - name: Create and push tag
