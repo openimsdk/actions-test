@@ -6,7 +6,6 @@ on:
 
 jobs:
   update-version:
-    if: startsWith(github.event.release.tag_name, 'v') && contains(github.event.release.tag_name, '.')
     runs-on: ubuntu-latest
     env:
       TAG_VERSION: ${{ github.event.release.tag_name }} 
@@ -64,15 +63,20 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const release = await github.repos.getRelease({
+            const { data: release } = await github.rest.repos.getReleaseByTag({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              release_id: context.payload.release.id
+              tag: context.payload.release.tag_name
             });
-            if (release.data.draft) {
-              await github.repos.updateRelease({
+            
+            if (release.draft) {
+              await github.rest.repos.updateRelease({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                release_id: context.payload.release.id,
+                release_id: release.id,
                 draft: false
               });
+              core.info(`Release ${release.tag_name} published successfully.`);
+            } else {
+              core.info(`Release ${release.tag_name} is already published.`);
+            }
