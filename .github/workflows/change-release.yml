@@ -63,10 +63,10 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const release = await github.rest.repos.getReleaseByTag({
+            const release = await github.rest.repos.getRelease({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              tag: context.payload.release.tag_name
+              release_id: context.payload.release.id
             });
             
             // Debugging Release Data
