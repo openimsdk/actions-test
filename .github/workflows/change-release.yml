@@ -1,4 +1,4 @@
-name: Update Version and Tag
+name: Update Version and Publish Draft Release
 
 on:
   release:
@@ -68,19 +68,24 @@ jobs:
               repo: context.repo.repo
             });
 
-            // Find the draft release with untagged pattern
-            const draftRelease = releases.data.find(release => release.draft && release.tag_name.startsWith('untagged'));
+            // Find the draft release where the title and tag_name are the same
+            const draftRelease = releases.data.find(release => 
+              release.draft && release.name === release.tag_name
+            );
 
             if (draftRelease) {
-              // Publish the draft release and set the correct tag name
+              // Print the URL of the draft release
+              core.info(`Found Draft Release: ${draftRelease.html_url}`);
+
+              // Publish the draft release using the release_id
               await github.rest.repos.updateRelease({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                release_id: draftRelease.id,  // Use release_id, not tag_name
-                draft: false,
-                tag_name: context.payload.release.tag_name  // Update the tag_name
+                release_id: draftRelease.id,  // Use release_id
+                draft: false
               });
-              core.info(`Draft Release ${draftRelease.tag_name} published and tag updated to ${context.payload.release.tag_name}.`);
+
+              core.info(`Draft Release ${draftRelease.tag_name} published successfully.`);
             } else {
-              core.info("No draft release found or already published.");
+              core.info("No matching draft release found.");
             }
