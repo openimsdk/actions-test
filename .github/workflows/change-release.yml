@@ -9,7 +9,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TAG_VERSION: ${{ github.event.release.tag_name }} 
-      BRANCH_NAME: update-tag-version-${{ github.event.release.tag_name }}
     steps:
       # Step 1: Checkout the original repository's code
       - name: Checkout code
@@ -57,27 +56,31 @@ jobs:
       - name: Wait for changes
         run: sleep 20
 
-      # Step 8: Publish Release if Draft and Update tag_name
-      - name: Publish Release if Draft and Update tag_name
+      # Step 8: Find and Publish Draft Release
+      - name: Find and Publish Draft Release
         uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const release = await github.rest.repos.getRelease({
+            // Get the list of releases
+            const releases = await github.rest.repos.listReleases({
               owner: context.repo.owner,
-              repo: context.repo.repo,
-              release_id: context.payload.release.id
+              repo: context.repo.repo
             });
-            
-            if (release.draft) {
+
+            // Find the draft release with untagged pattern
+            const draftRelease = releases.data.find(release => release.draft && release.tag_name.startsWith('untagged'));
+
+            if (draftRelease) {
+              // Publish the draft release and set the correct tag name
               await github.rest.repos.updateRelease({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                release_id: release.id,
+                release_id: draftRelease.id,  // Use release_id, not tag_name
                 draft: false,
-                tag_name: release.tag_name  // Ensure tag_name is set correctly
+                tag_name: context.payload.release.tag_name  // Update the tag_name
               });
-              core.info(`Release ${release.tag_name} published and tag updated successfully.`);
+              core.info(`Draft Release ${draftRelease.tag_name} published and tag updated to ${context.payload.release.tag_name}.`);
             } else {
-              core.info(`Release ${release.tag_name} is already published.`);
+              core.info("No draft release found or already published.");
             }
