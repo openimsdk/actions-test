@@ -57,17 +57,20 @@ jobs:
       - name: Wait for changes
         run: sleep 20
 
-      # Step 8: Publish Release if Draft and Update tag_name
+      # Step 8: Publish Release if Draft
       - name: Publish Release if Draft and Update tag_name
         uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const release = await github.rest.repos.getRelease({
+            const release = await github.rest.repos.getReleaseByTag({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              release_id: context.payload.release.id
+              tag: context.payload.release.tag_name
             });
+            
+            // Debugging Release Data
+            console.log("Release data:", release);
             
             if (release.draft) {
               await github.rest.repos.updateRelease({
@@ -75,7 +78,7 @@ jobs:
                 repo: context.repo.repo,
                 release_id: release.id,
                 draft: false,
-                tag_name: release.tag_name
+                tag_name: release.tag_name  // Ensure tag_name is set correctly
               });
               core.info(`Release ${release.tag_name} published and tag updated successfully.`);
             } else {
