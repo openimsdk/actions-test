@@ -57,7 +57,7 @@ jobs:
       - name: Wait for changes
         run: sleep 20
 
-      # Step 8: Publish Release if Draft
+      # Step 8: Publish Release if Draft and Update tag_name
       - name: Publish Release if Draft and Update tag_name
         uses: actions/github-script@v6
         with:
@@ -68,9 +68,6 @@ jobs:
               repo: context.repo.repo,
               release_id: context.payload.release.id
             });
-            
-            // Debugging Release Data
-            console.log("Release data:", release);
             
             if (release.draft) {
               await github.rest.repos.updateRelease({
