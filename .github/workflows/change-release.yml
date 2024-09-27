@@ -1,4 +1,4 @@
-name: Update Version and Publish Draft Release
+name: Update Version when tag Release 
 
 on:
   release:
@@ -52,9 +52,9 @@ jobs:
           git tag ${{ env.TAG_VERSION }}
           git push origin ${{ env.TAG_VERSION }}
 
-      # Step 7: Wait for changes to propagate
-      - name: Wait for changes
-        run: sleep 20
+    #   # Step 7: Wait for changes to propagate
+    #   - name: Wait for changes
+    #     run: sleep 20
 
       # Step 8: Find and Publish Draft Release
       - name: Find and Publish Draft Release
@@ -74,9 +74,6 @@ jobs:
             );
 
             if (draftRelease) {
-              // Print the URL of the draft release
-              core.info(`Found Draft Release: ${draftRelease.html_url}`);
-
               // Publish the draft release using the release_id
               await github.rest.repos.updateRelease({
                 owner: context.repo.owner,
