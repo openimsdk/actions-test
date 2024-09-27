@@ -1,4 +1,4 @@
-name: Update Version when tag Release 
+name: Update Version File on Release
 
 on:
   release:
@@ -51,10 +51,6 @@ jobs:
         run: |
           git tag ${{ env.TAG_VERSION }}
           git push origin ${{ env.TAG_VERSION }}
-
-    #   # Step 7: Wait for changes to propagate
-    #   - name: Wait for changes
-    #     run: sleep 20
 
       # Step 8: Find and Publish Draft Release
       - name: Find and Publish Draft Release
