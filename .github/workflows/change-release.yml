@@ -55,18 +55,18 @@ jobs:
 
       # Step 7: Wait for changes to propagate
       - name: Wait for changes
-        run: sleep 30
+        run: sleep 20
 
-      # Step 8: Publish Release if Draft
-      - name: Publish Release if Draft
+      # Step 8: Publish Release if Draft and Update tag_name
+      - name: Publish Release if Draft and Update tag_name
         uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const { data: release } = await github.rest.repos.getReleaseByTag({
+            const release = await github.rest.repos.getRelease({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              tag: context.payload.release.tag_name
+              release_id: context.payload.release.id
             });
             
             if (release.draft) {
@@ -74,9 +74,10 @@ jobs:
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 release_id: release.id,
-                draft: false
+                draft: false,
+                tag_name: release.tag_name
               });
-              core.info(`Release ${release.tag_name} published successfully.`);
+              core.info(`Release ${release.tag_name} published and tag updated successfully.`);
             } else {
               core.info(`Release ${release.tag_name} is already published.`);
             }
