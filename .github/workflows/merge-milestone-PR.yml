@@ -10,7 +10,7 @@ on:
       target_branch:
         description: 'Target branch to merge the consolidated PR'
         required: true
-        default: 'pre-release-v3.8.2'  # Default target branch with pre-release-v*.* format
+        default: 'pre-release-v3.8.2'  # Default target branch with pre-release-v*.*.* format
   schedule:
     - cron: '0 0 * * 0'  # Scheduled to run every Sunday at 00:00 UTC
 
@@ -28,15 +28,26 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-      # Step 3: Fetch closed PRs from the specified milestone using GitHub API
+      # Step 3: Fetch closed PRs from the specified milestone using GitHub API with debugging output
       - name: Fetch Closed PRs from Milestone
         id: fetch_prs
         run: |
           milestone="${{ github.event.inputs.milestone }}"
+          # Fetch PRs from GitHub API and print response for debugging
           prs=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
                 -H "Accept: application/vnd.github+json" \
                 "https://api.github.com/repos/${{ github.repository }}/pulls?state=closed&milestone=$milestone")
+          
+          # Print the raw response for debugging
+          echo "Raw PRs response:"
+          echo "$prs"
+
+          # Filter merged PRs and save to closed_prs.json
           echo "$prs" | jq -r '.[] | select(.merged_at != null) | {number: .number, headRefName: .head.ref, mergeCommit: .merge_commit_sha}' > closed_prs.json
+          
+          # Print the contents of closed_prs.json for verification
+          echo "Filtered PRs JSON:"
+          cat closed_prs.json
 
       # Step 4: Create a new branch from main, cherry-pick PRs, and push to remote
       - name: Create and Cherry-pick Branch
@@ -73,7 +84,7 @@ jobs:
 
       # Step 5: Create a single pull request to merge the cherry-pick branch into the target branch
       - name: Create Pull Request to Target Branch
-        if: steps.fetch_prs.outputs.prs != '[]'
+        if: ${{ steps.fetch_prs.outputs.prs }} != "[]"
         uses: peter-evans/create-pull-request@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
