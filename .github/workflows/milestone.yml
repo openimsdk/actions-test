@@ -1,0 +1,52 @@
+name: Assign Milestone to PR
+
+on:
+  pull_request:
+    types: [opened, edited, reopened]
+
+jobs:
+  assign-milestone:
+    runs-on: ubuntu-latest
+
+    env:
+      STABLE_VERSION_MILESTONE: v3.8
+      FEATURE_VERSION_MILESTONE: v3.8.2
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Set milestone based on PR title
+      id: set-milestone
+      run: |
+        if [[ "${{ github.event.pull_request.title }}" == fix:* ]]; then
+          echo "::set-output name=milestone::${{ env.STABLE_VERSION_MILESTONE }}"
+        else
+          echo "::set-output name=milestone::${{ env.FEATURE_VERSION_MILESTONE }}"
+      shell: bash
+
+    - name: Assign milestone to PR
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const pr = context.payload.pull_request;
+          const milestoneTitle = '${{ steps.set-milestone.outputs.milestone }}';
+
+          const { data: milestones } = await github.rest.issues.listMilestones({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+          });
+
+          const milestone = milestones.find(m => m.title === milestoneTitle);
+
+          if (milestone) {
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              milestone: milestone.number
+            });
+            console.log(`Assigned milestone "${milestone.title}" to PR #${pr.number}`);
+          } else {
+            console.log(`Milestone "${milestoneTitle}" not found.`);
+          }
