@@ -23,6 +23,7 @@ jobs:
           echo "::set-output name=milestone::${{ env.STABLE_VERSION_MILESTONE }}"
         else
           echo "::set-output name=milestone::${{ env.FEATURE_VERSION_MILESTONE }}"
+        fi
       shell: bash
 
     - name: Assign milestone to PR
@@ -49,4 +50,3 @@ jobs:
             console.log(`Assigned milestone "${milestone.title}" to PR #${pr.number}`);
           } else {
             console.log(`Milestone "${milestoneTitle}" not found.`);
-          }
