@@ -73,7 +73,7 @@ jobs:
 
       # Step 5: Create a single pull request to merge the cherry-pick branch into the target branch
       - name: Create Pull Request to Target Branch
-        if: ${{ steps.fetch_prs.outputs.prs }} != "[]"
+        if: steps.fetch_prs.outputs.prs != '[]'
         uses: peter-evans/create-pull-request@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
