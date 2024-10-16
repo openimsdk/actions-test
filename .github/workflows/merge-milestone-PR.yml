@@ -17,11 +17,10 @@ on:
 jobs:
   cherry_pick_closed_milestone_prs:
     runs-on: ubuntu-latest
-
     steps:
       # Step 1: Checkout the repository code
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v2
 
       # Step 2: Set up Git user details for making commits
       - name: Setup Git
@@ -29,32 +28,41 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-      # Step 3: Fetch closed PRs from the specified milestone using GitHub API with debugging output
-      - name: Fetch Closed PRs from Milestone
+      # Step 3: Fetch closed PRs from the specified milestone using GitHub API and parse with a script
+      - name: Fetch and Filter Closed PRs
         id: fetch_prs
         run: |
           milestone="${{ github.event.inputs.milestone }}"
-          # Fetch PRs from GitHub API and print response for debugging
+          target_branch="${{ github.event.inputs.target_branch }}"
+          
+          # Fetch closed PRs for the specified milestone
           prs=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
                 -H "Accept: application/vnd.github+json" \
                 "https://api.github.com/repos/${{ github.repository }}/pulls?state=closed&milestone=$milestone")
-          
-          # Print the raw response for debugging
-          echo "Raw PRs response:"
-          echo "$prs"
 
-          # Filter merged PRs and save to closed_prs.json
-          echo "$prs" | jq -r 'map(select(.merged_at != null)) | map({number: .number, headRefName: .head.ref, mergeCommit: .merge_commit_sha})' > closed_prs.json
+          # Parse PR numbers and merge commits
+          echo "$prs" | grep '"number":\|"merge_commit_sha":' | while read -r line; do
+            if [[ $line == *'"number":'* ]]; then
+              pr_number=$(echo "$line" | grep -o '[0-9]\+')
+            elif [[ $line == *'"merge_commit_sha":'* ]]; then
+              merge_commit=$(echo "$line" | grep -o '[a-f0-9]\{40\}')
+              
+              # Skip if merge_commit is empty or null
+              if [[ -n "$merge_commit" ]]; then
+                echo "PR #$pr_number with commit $merge_commit ready for cherry-pick"
+                echo "$pr_number:$merge_commit" >> pr_commits.txt
+              fi
+            fi
+          done
           
-          # Print the contents of closed_prs.json for verification
-          echo "Filtered PRs JSON:"
-          cat closed_prs.json
+          # Show parsed PRs and commits
+          echo "Parsed PRs and Commits:"
+          cat pr_commits.txt || echo "No PRs found for milestone."
 
       # Step 4: Create a new branch from main, cherry-pick PRs, and push to remote
       - name: Create and Cherry-pick Branch
         if: ${{ steps.fetch_prs.outputs.prs }} != "[]"
         run: |
-          target_branch="${{ github.event.inputs.target_branch }}"
           cherry_pick_branch="milestone-cherry-pick-$(date +%Y%m%d%H%M%S)"
 
           # Switch to main branch, pull latest changes, then create a new cherry-pick branch
@@ -62,23 +70,15 @@ jobs:
           git pull origin main
           git checkout -b $cherry_pick_branch
 
-          # Iterate over closed PRs in the milestone and cherry-pick each merge commit
-          jq -c '.[]' closed_prs.json | while read -r pr; do
-            pr_number=$(echo "$pr" | jq -r '.number')
-            merge_commit=$(echo "$pr" | jq -r '.mergeCommit')
-
-            if [ "$merge_commit" != "null" ]; then
-              # Check if the merge commit is already in the target branch
-              if git merge-base --is-ancestor $merge_commit $target_branch; then
-                echo "Skipping PR #$pr_number - Commit $merge_commit already in $target_branch"
-              else
-                echo "Cherry-picking PR #$pr_number with commit $merge_commit"
-                git cherry-pick $merge_commit || git cherry-pick --abort
-              fi
+          # Read each PR and its merge commit, cherry-pick if not in target branch
+          while IFS=: read -r pr_number merge_commit; do
+            if git merge-base --is-ancestor $merge_commit $target_branch; then
+              echo "Skipping PR #$pr_number - Commit $merge_commit already in $target_branch"
             else
-              echo "Skipping PR #$pr_number as it does not have a merge commit."
+              echo "Cherry-picking PR #$pr_number with commit $merge_commit"
+              git cherry-pick $merge_commit || git cherry-pick --abort
             fi
-          done
+          done < pr_commits.txt
 
           # Push the cherry-pick branch to the remote repository
           git push origin $cherry_pick_branch
