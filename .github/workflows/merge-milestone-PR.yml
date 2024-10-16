@@ -35,6 +35,9 @@ jobs:
           milestone="${{ github.event.inputs.milestone }}"
           target_branch="${{ github.event.inputs.target_branch }}"
           
+          # Initialize environment variable for PR branches
+          echo "PR_BRANCHES=" >> $GITHUB_ENV
+
           # Fetch closed PRs for the specified milestone
           prs=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
                 -H "Accept: application/vnd.github+json" \
@@ -47,21 +50,17 @@ jobs:
             elif [[ $line == *'"ref":'* ]]; then
               head_ref=$(echo "$line" | grep -o '"ref": *"[^"]*' | grep -o '[^"]*$')
               
-              # Save PR number and head_ref for cherry-pick
+              # Append PR number and head_ref to PR_BRANCHES env variable
               if [[ -n "$head_ref" ]]; then
                 echo "PR #$pr_number with branch $head_ref ready for cherry-pick"
-                echo "$pr_number:$head_ref" >> pr_branches.txt
+                echo "PR_BRANCHES+=\"$pr_number:$head_ref \"" >> $GITHUB_ENV
               fi
             fi
           done
           
-          # Show parsed PRs and head_refs
-          echo "Parsed PRs and Branches:"
-          cat pr_branches.txt || echo "No PRs found for milestone."
-
       # Step 4: Create a new branch from main, cherry-pick PRs, and push to remote
       - name: Create and Cherry-pick Branch
-        if: ${{ steps.fetch_prs.outputs.prs }} != "[]"
+        if: ${{ github.env.PR_BRANCHES != '' }}
         run: |
           cherry_pick_branch="milestone-cherry-pick-$(date +%Y%m%d%H%M%S)"
           target_branch="${{ github.event.inputs.target_branch }}"
@@ -74,9 +73,12 @@ jobs:
           git pull origin main
           git checkout -b $cherry_pick_branch
 
-          # Read each PR and its head_ref branch, cherry-pick the latest commit from each head_ref
+          # Read each PR and its head_ref branch from the PR_BRANCHES env variable
           touch conflict_commits.txt
-          while IFS=: read -r pr_number head_ref; do
+          for pr_data in $PR_BRANCHES; do
+            pr_number="${pr_data%%:*}"
+            head_ref="${pr_data#*:}"
+
             # Fetch the latest commit from the PR's head_ref branch
             git fetch origin $head_ref || { echo "Failed to fetch head branch for PR #$pr_number"; continue; }
             latest_commit=$(git rev-parse FETCH_HEAD)
@@ -92,7 +94,7 @@ jobs:
                 git cherry-pick --abort
               fi
             fi
-          done < pr_branches.txt
+          done
 
           # Push the cherry-pick branch to the remote repository
           git push origin $cherry_pick_branch
@@ -105,7 +107,7 @@ jobs:
 
       # Step 5: Create a single pull request to merge the cherry-pick branch into the target branch
       - name: Create Pull Request to Target Branch
-        if: ${{ steps.fetch_prs.outputs.prs }} != "[]"
+        if: ${{ github.env.PR_BRANCHES != '' }}
         uses: peter-evans/create-pull-request@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
