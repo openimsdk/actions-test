@@ -1,4 +1,4 @@
-name: Update Version and Tag
+name: Update Version File on Release
 
 on:
   release:
@@ -9,7 +9,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TAG_VERSION: ${{ github.event.release.tag_name }} 
-      BRANCH_NAME: update-tag-version-${{ github.event.release.tag_name }}
     steps:
       # Step 1: Checkout the original repository's code
       - name: Checkout code
@@ -53,30 +52,33 @@ jobs:
           git tag ${{ env.TAG_VERSION }}
           git push origin ${{ env.TAG_VERSION }}
 
-      # Step 7: Wait for changes to propagate
-      - name: Wait for changes
-        run: sleep 30
-
-      # Step 8: Publish Release if Draft
-      - name: Publish Release if Draft
+      # Step 8: Find and Publish Draft Release
+      - name: Find and Publish Draft Release
         uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const { data: release } = await github.rest.repos.getReleaseByTag({
+            // Get the list of releases
+            const releases = await github.rest.repos.listReleases({
               owner: context.repo.owner,
-              repo: context.repo.repo,
-              tag: context.payload.release.tag_name
+              repo: context.repo.repo
             });
-            
-            if (release.draft) {
+
+            // Find the draft release where the title and tag_name are the same
+            const draftRelease = releases.data.find(release => 
+              release.draft && release.name === release.tag_name
+            );
+
+            if (draftRelease) {
+              // Publish the draft release using the release_id
               await github.rest.repos.updateRelease({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                release_id: release.id,
+                release_id: draftRelease.id,  // Use release_id
                 draft: false
               });
-              core.info(`Release ${release.tag_name} published successfully.`);
+
+              core.info(`Draft Release ${draftRelease.tag_name} published successfully.`);
             } else {
-              core.info(`Release ${release.tag_name} is already published.`);
+              core.info("No matching draft release found.");
             }
