@@ -32,14 +32,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-          token: ${{ secrets.BOT_TOKEN }}
+          fetch-depth: 0  # Ensure full history is fetched
+          token: ${{ secrets.BOT_TOKEN }}  # Use BOT_TOKEN for authentication
+        #   token: ${{ secrets.GITHUB_TOKEN }}  # Original GitHub token for authentication (commented out)
 
       # Step 2: Set up Git user details for commits
       - name: Setup Git
         run: |
           git config --global user.name "OpenIM-Robot"
           git config --global user.email "OpenIM-Robot@users.noreply.github.com"
+        #   git config --global user.name "github-actions[bot]"
+        #   git config --global user.email "github-actions[bot]@users.noreply.github.com"  # Original GitHub bot user details (commented out)
 
       # Step 3: Fetch milestone ID and PR details
       - name: Fetch Milestone ID and PR Numbers
@@ -143,6 +146,7 @@ jobs:
 
           # Configure remote URL with BOT_TOKEN for authentication
           git remote set-url origin "https://${BOT_TOKEN}@github.com/${{ github.repository }}.git"
+          # git remote set-url origin "https://${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"  # Original GitHub token for push (commented out)
 
           # Push the cherry-pick branch to the remote repository
           git push origin $CHERRY_PICK_BRANCH
