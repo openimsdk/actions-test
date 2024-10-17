@@ -1,0 +1,77 @@
+name: Create Pre-Release PR from Milestone
+
+on:
+  workflow_dispatch:  # 支持手动触发
+    inputs:
+      milestone:
+        description: 'Milestone name to collect closed PRs from'
+        required: true
+        default: 'v3.8.2'  # 默认 milestone 名称
+      target_branch:
+        description: 'Target branch to merge the consolidated PR'
+        required: true
+        default: 'pre-release-v3.8.2'  # 默认目标分支
+  schedule:
+    - cron: '0 0 * * 0'  # 定时触发：每周日 UTC 时间 0 点自动运行
+
+jobs:
+  cherry_pick_milestone_prs:
+    runs-on: ubuntu-latest
+    steps:
+      # Step 1: Checkout repository code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Step 2: Set up Git user details for commits
+      - name: Setup Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      # Step 3: Fetch closed PRs for the specified milestone using GitHub API
+      - name: Fetch Closed PRs from Milestone
+        id: fetch_prs
+        run: |
+          milestone="${{ github.event.inputs.milestone }}"
+          prs=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/${{ github.repository }}/issues?milestone=$milestone&state=closed&pull_request")
+
+          # Parse PR numbers and merge commits
+          echo "$prs" | grep '"number":' | awk '{print $2}' | tr -d ',' > pr_numbers.txt
+
+      # Step 4: Create a new branch from main and cherry-pick PRs, then push to remote
+      - name: Cherry-pick Closed PRs and Create Branch
+        run: |
+          # 定义分支名称
+          cherry_pick_branch="milestone-cherry-pick-$(date +%Y%m%d%H%M%S)"
+          target_branch="${{ github.event.inputs.target_branch }}"
+
+          # 切换到 main，拉取最新的更改，创建新的分支
+          git checkout main
+          git pull origin main
+          git checkout -b $cherry_pick_branch
+
+          # 读取 pr_numbers.txt 文件中的 PR 编号，并对每个 PR 执行 cherry-pick
+          while read pr_number; do
+            merge_commit=$(git log --grep="Merge pull request #$pr_number" --pretty=format:"%H" -n 1)
+            if [ -n "$merge_commit" ]; then
+              echo "Cherry-picking PR #$pr_number with commit $merge_commit"
+              git cherry-pick $merge_commit || git cherry-pick --abort
+            else
+              echo "No merge commit found for PR #$pr_number, skipping..."
+            fi
+          done < pr_numbers.txt
+
+          # 推送到远程仓库
+          git push origin $cherry_pick_branch
+
+      # Step 5: Create a PR to merge cherry-pick branch into the target branch
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: $cherry_pick_branch
+          base: ${{ github.event.inputs.target_branch }}
+          title: "Consolidated Closed Milestone PRs for ${{ github.event.inputs.target_branch }}"
+          body: "This PR includes cherry-picked changes from closed PRs in milestone '${{ github.event.inputs.milestone }}'."
