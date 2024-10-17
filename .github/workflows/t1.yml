@@ -19,6 +19,10 @@ env:
   TARGET_BRANCH: ${{ github.event.inputs.target_branch || 'pre-release-v3.8.2' }}
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   cherry_pick_milestone_prs:
     runs-on: ubuntu-latest
@@ -93,7 +97,6 @@ jobs:
           git checkout -b $TARGET_BRANCH origin/$TARGET_BRANCH
           git pull origin $TARGET_BRANCH
 
-          # 创建一个新的分支来应用 cherry-pick 变更
           git checkout -b $CHERRY_PICK_BRANCH
 
           for commit_hash in $COMMIT_HASHES; do
@@ -104,14 +107,29 @@ jobs:
             fi
           done
 
-      # Step 6: Create a pull request to merge the new branch into TARGET_BRANCH
+      # Step 6: Create a pull request to merge the new branch into TARGET_BRANCH (using script)
       - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          branch: ${{ env.CHERRY_PICK_BRANCH }}
-          base: $TARGET_BRANCH
-          title: |
-            Consolidated PRs for Pre-Release - $TARGET_BRANCH - $(awk '{printf "#%s ", $1}' pr_numbers.txt)
-          body: |
-            This PR includes cherry-picked changes from closed PRs in milestone '${{ env.MILESTONE_NAME }}'.
+        run: |
+          pr_title="Consolidated PRs for Pre-Release - $TARGET_BRANCH - $(cat pr_numbers.txt | awk '{printf "#%s ", $1}')"
+          pr_body="This PR includes cherry-picked changes from closed PRs in milestone '${MILESTONE_NAME}'."
+
+          curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/${{ github.repository }}/pulls \
+            -d "$(jq -n \
+              --arg title "$pr_title" \
+              --arg head "$CHERRY_PICK_BRANCH" \
+              --arg base "$TARGET_BRANCH" \
+              --arg body "$pr_body" \
+              '{title: $title, head: $head, base: $base, body: $body}')"
+
+    #   - name: Create Pull Request
+    #     uses: peter-evans/create-pull-request@v4
+    #     with:
+    #       token: ${{ secrets.GITHUB_TOKEN }}
+    #       branch: ${{ env.CHERRY_PICK_BRANCH }}
+    #       base: $TARGET_BRANCH
+    #       title: |
+    #         Consolidated PRs for Pre-Release - $TARGET_BRANCH - $(awk '{printf "#%s ", $1}' pr_numbers.txt)
+    #       body: |
+    #         This PR includes cherry-picked changes from closed PRs in milestone '${{ env.MILESTONE_NAME }}'.
