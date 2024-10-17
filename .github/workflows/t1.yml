@@ -23,9 +23,11 @@ jobs:
   cherry_pick_milestone_prs:
     runs-on: ubuntu-latest
     steps:
-      # Step 1: Checkout repository code
+      # Step 1: Checkout repository code with full history
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Ensure full history is fetched
 
       # Step 2: Set up Git user details for commits
       - name: Setup Git
@@ -88,21 +90,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git fetch --all
+          git fetch origin
           git checkout -b $TARGET_BRANCH origin/$TARGET_BRANCH
           git pull origin $TARGET_BRANCH
           git checkout -b $CHERRY_PICK_BRANCH
 
           for commit_hash in $COMMIT_HASHES; do
             echo "Attempting to cherry-pick commit $commit_hash"
-
-            # Verify that the commit hash exists locally
-            if ! git cat-file -e "$commit_hash" 2>/dev/null; then
-              echo "Commit $commit_hash does not exist in the local repository. Skipping."
-              continue
-            fi
-
-            # Attempt to cherry-pick the commit
             if ! git cherry-pick "$commit_hash"; then
               echo "Cherry-pick failed for commit $commit_hash, aborting."
               git cherry-pick --abort
@@ -112,7 +106,9 @@ jobs:
           git pull --rebase origin $CHERRY_PICK_BRANCH
           
           git remote set-url origin "https://$GITHUB_TOKEN@github.com/${{ github.repository }}.git"
-          git push origin $CHERRY_PICK_BRANCH
+          
+          # Push the new cherry-pick branch to the repository and set upstream
+          git push --set-upstream origin $CHERRY_PICK_BRANCH
 
       # Step 6: Create a pull request to merge the cherry-pick branch into the target branch
       - name: Create Pull Request
