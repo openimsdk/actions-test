@@ -110,6 +110,9 @@ jobs:
             fi
           done < commit_hashes.txt
 
+          # Pull and rebase to update local branch before pushing
+          git pull --rebase origin $cherry_pick_branch
+
           # Push the new cherry-pick branch to the repository
           git push origin $cherry_pick_branch
 
