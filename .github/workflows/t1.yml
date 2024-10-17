@@ -85,14 +85,14 @@ jobs:
           echo "COMMIT_HASHES=$commit_hashes" >> $GITHUB_ENV
           echo "CHERRY_PICK_BRANCH=$cherry_pick_branch" >> $GITHUB_ENV
 
-      # Step 5: Cherry-pick commits and push branch as github-actions[bot]
-      - name: Cherry-pick Commits and Push Branch
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Step 5: Cherry-pick commits to a new branch
+      - name: Cherry-pick Commits to New Branch
         run: |
           git fetch origin
           git checkout -b $TARGET_BRANCH origin/$TARGET_BRANCH
           git pull origin $TARGET_BRANCH
+
+          # 创建一个新的分支来应用 cherry-pick 变更
           git checkout -b $CHERRY_PICK_BRANCH
 
           for commit_hash in $COMMIT_HASHES; do
@@ -103,14 +103,7 @@ jobs:
             fi
           done
 
-          git pull --rebase origin $CHERRY_PICK_BRANCH
-          
-          git remote set-url origin "https://$GITHUB_TOKEN@github.com/${{ github.repository }}.git"
-          
-          # Push the new cherry-pick branch to the repository and set upstream
-          git push --set-upstream origin $CHERRY_PICK_BRANCH
-
-      # Step 6: Create a pull request to merge the cherry-pick branch into the target branch
+      # Step 6: Create a pull request to merge the new branch into TARGET_BRANCH
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v4
         env:
