@@ -3,7 +3,8 @@ name: Create Pre-Release PR from Milestone
 permissions:
   contents: write
   pull-requests: write
-
+  issues: write  #
+  
 on:
   workflow_dispatch:
     inputs:
@@ -23,6 +24,7 @@ env:
   TARGET_BRANCH: ${{ github.event.inputs.target_branch || 'pre-release-v3.8.2' }}
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+  LABEL_NAME: cherry-picked
 
 jobs:
   cherry_pick_milestone_prs:
@@ -34,9 +36,8 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.BOT_TOKEN }}
-        #   token: ${{ secrets.GITHUB_TOKEN }}  # Original GitHub token (commented out)
 
-      # Step 2: Fetch milestone ID, PR numbers, and filter out already cherry-picked PRs
+      # Step 2: Fetch milestone ID, PR numbers, and filter out labeled PRs
       - name: Fetch Milestone ID and Filter PRs
         env:
           MILESTONE_NAME: ${{ env.MILESTONE_NAME }}
@@ -55,7 +56,7 @@ jobs:
           issues=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
                 -H "Accept: application/vnd.github+json" \
                 "https://api.github.com/repos/${{ github.repository }}/issues?milestone=$milestone_id&state=closed&per_page=100")
-          pr_numbers=$(echo "$issues" | jq -r '.[] | select(.pull_request != null) | .number')
+          pr_numbers=$(echo "$issues" | jq -r '.[] | select(.pull_request != null and (.labels[]?.name != "cherry-picked")) | .number')
 
           # Initialize filtered lists for PR numbers and commit hashes
           filtered_pr_numbers=""
@@ -65,39 +66,15 @@ jobs:
           git fetch origin ${{ env.TARGET_BRANCH }}
           git checkout ${{ env.TARGET_BRANCH }}
 
-          # Check each PR's files and contents
+          # Process PRs without the "cherry-picked" label
           for pr_number in $pr_numbers; do
             pr_data=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
               -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/repos/${{ github.repository }}/pulls/$pr_number/files")
-            
-            all_files_exist=true
-            for file in $(echo "$pr_data" | jq -r '.[].filename'); do
-              # Check if file content in the PR matches the content in the target branch
-              pr_file_content=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-                -H "Accept: application/vnd.github+json" \
-                "https://api.github.com/repos/${{ github.repository }}/contents/$file?ref=pull/$pr_number/head" | jq -r '.content' | base64 --decode)
-              
-              target_file_content=$(cat "$file" 2>/dev/null || echo "")
+              "https://api.github.com/repos/${{ github.repository }}/pulls/$pr_number/commits")
 
-              # If contents differ, mark as not fully contained in the target branch
-              if [ "$pr_file_content" != "$target_file_content" ]; then
-                all_files_exist=false
-                break
-              fi
-            done
-
-            # Add PR if any of its file contents are not in the target branch
-            if [ "$all_files_exist" = "false" ]; then
-              echo "PR #$pr_number contains changes not in ${TARGET_BRANCH}, including for cherry-pick."
-              filtered_pr_numbers="$filtered_pr_numbers $pr_number"
-              first_pr_commit_sha=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-                -H "Accept: application/vnd.github+json" \
-                "https://api.github.com/repos/${{ github.repository }}/pulls/$pr_number/commits" | jq -r '.[0].sha')
-              filtered_commit_hashes="$filtered_commit_hashes $first_pr_commit_sha"
-            else
-              echo "PR #$pr_number already fully exists in ${TARGET_BRANCH}, skipping..."
-            fi
+            first_pr_commit_sha=$(echo "$pr_data" | jq -r '.[0].sha')
+            filtered_pr_numbers="$filtered_pr_numbers $pr_number"
+            filtered_commit_hashes="$filtered_commit_hashes $first_pr_commit_sha"
           done
 
           # Save filtered PR numbers and commit hashes as environment variables
@@ -146,7 +123,6 @@ jobs:
 
           # Configure remote URL with BOT_TOKEN for authentication
           git remote set-url origin "https://${BOT_TOKEN}@github.com/${{ github.repository }}.git"
-          # git remote set-url origin "https://${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"  # Original GitHub token for push (commented out)
 
           # Push the cherry-pick branch to the remote repository
           git push origin $cherry_pick_branch
@@ -163,7 +139,7 @@ jobs:
           pr_title="Consolidated PRs for Pre-Release - $TARGET_BRANCH - $(echo $FILTERED_PR_NUMBERS | awk '{printf "#%s ", $1}')"
           pr_body="This PR includes cherry-picked changes from closed PRs in milestone '${MILESTONE_NAME}'."
 
-          curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" \
+          pull_request=$(curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             https://api.github.com/repos/${{ github.repository }}/pulls \
             -d "$(jq -n \
@@ -171,4 +147,18 @@ jobs:
               --arg head "$cherry_pick_branch" \
               --arg base "$TARGET_BRANCH" \
               --arg body "$pr_body" \
-              '{title: $title, head: $head, base: $base, body: $body}')"
+              '{title: $title, head: $head, base: $base, body: $body}')")
+
+          # Extract PR number from the response
+          new_pr_number=$(echo "$pull_request" | jq -r '.number')
+
+      # Step 5: Add "cherry-picked" label to successfully cherry-picked PRs
+      - name: Label Successfully Cherry-Picked PRs
+        if: ${{ success() }}
+        run: |
+          for pr_number in $FILTERED_PR_NUMBERS; do
+            curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/issues/$pr_number/labels" \
+              -d "$(jq -n --arg label "${LABEL_NAME}" '{labels: [$label]}')"
+          done
