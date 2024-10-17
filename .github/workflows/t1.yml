@@ -26,30 +26,59 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-      # Step 3: Fetch closed PRs for the specified milestone using GitHub API
-      - name: Fetch Closed PRs from Milestone
-        id: fetch_prs
+      # Step 3: Fetch milestone ID based on milestone name
+      - name: Fetch Milestone ID
+        id: get_milestone_id
         env:
           MILESTONE: ${{ github.event.inputs.milestone }}
         run: |
-          # Fetch all closed PRs for the specified milestone using the GitHub API
+          # Fetch the list of milestones and extract the ID for the specified milestone
+          milestone_data=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/milestones")
+
+          # Extract milestone ID based on milestone title
+          milestone_id=$(echo "$milestone_data" | grep -B3 "\"title\": \"$MILESTONE\"" | grep '"number":' | head -n1 | grep -o '[0-9]\+')
+          if [ -z "$milestone_id" ]; then
+            echo "Milestone '$MILESTONE' not found. Exiting."
+            exit 1
+          fi
+
+          echo "Milestone ID: $milestone_id"
+          echo "MILESTONE_ID=$milestone_id" >> $GITHUB_ENV
+
+      # Step 4: Fetch closed PRs with the specified milestone ID and extract merge_commit_sha
+      - name: Fetch Closed PRs and Merge Commits
+        env:
+          MILESTONE_ID: ${{ env.MILESTONE_ID }}
+        run: |
+          # Fetch all closed PRs from the repository
           prs=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
                 -H "Accept: application/vnd.github+json" \
-                "https://api.github.com/repos/${{ github.repository }}/pulls?state=closed&milestone=$MILESTONE")
+                "https://api.github.com/repos/${{ github.repository }}/pulls?state=closed")
 
-          # Initialize files to store PR numbers and commit hashes
+          # Initialize files to store PR numbers and merge commit hashes
           > pr_numbers.txt
           > commit_hashes.txt
-          
-          # Parse PR numbers and merge commit SHA
-          echo "$prs" | grep -E '"number":|"merge_commit_sha":' | while read -r line; do
-            if [[ $line == *'"number":'* ]]; then
+
+          # Parse only PRs with the specified milestone ID and extract merge_commit_sha
+          echo "$prs" | grep -E '"number":|"merge_commit_sha":|"milestone":|"merged_at":' | while read -r line; do
+            if [[ $line == *'"milestone":'* && $line != *"\"number\": $MILESTONE_ID"* ]]; then
+              skip_next="true"
+            elif [[ $line == *'"number":'* && -z "$skip_next" ]]; then
               pr_number=$(echo "$line" | grep -o '[0-9]\+')
               echo "#$pr_number" >> pr_numbers.txt
-            elif [[ $line == *'"merge_commit_sha":'* ]]; then
+            elif [[ $line == *'"merge_commit_sha":'* && -z "$skip_next" ]]; then
               merge_commit=$(echo "$line" | grep -o '"[a-f0-9]\{40\}"' | tr -d '"')
               if [[ -n "$merge_commit" ]]; then
                 echo "$merge_commit" >> commit_hashes.txt
+              fi
+            elif [[ $line == *'"merged_at":'* && -z "$skip_next" ]]; then
+              if [[ $line == *"null"* ]]; then
+                skip_next="true"
+                sed -i '$ d' pr_numbers.txt  # Remove last PR number if it's not merged
+              else
+                unset skip_next
               fi
             fi
           done
@@ -60,7 +89,7 @@ jobs:
           echo "Parsed merge commits:"
           cat commit_hashes.txt || echo "No merge commits found for milestone."
 
-      # Step 4: Cherry-pick all selected merge commits into a new branch
+      # Step 5: Cherry-pick all selected merge commits into a new branch
       - name: Cherry-pick Merged Commits and Create Branch
         env:
           TARGET_BRANCH: ${{ github.event.inputs.target_branch }}
@@ -71,9 +100,6 @@ jobs:
             exit 1
           fi
 
-          # Read merge commit hashes from commit_hashes.txt
-          commit_hashes=$(tr '\n' ' ' < commit_hashes.txt)
-
           # Generate a branch name using the first commit hash
           first_commit_hash=$(head -n 1 commit_hashes.txt)
           cherry_pick_branch="cherry-pick-${first_commit_hash:0:7}"
@@ -83,13 +109,19 @@ jobs:
           git pull origin main
           git checkout -b $cherry_pick_branch
 
-          # Perform cherry-pick for all commits in one command
-          git cherry-pick $commit_hashes || git cherry-pick --abort
+          # Perform cherry-pick for each commit individually
+          while IFS= read -r commit_hash; do
+            echo "Attempting to cherry-pick commit $commit_hash"
+            if ! git cherry-pick "$commit_hash"; then
+              echo "Cherry-pick failed for commit $commit_hash, skipping..."
+              git cherry-pick --abort
+            fi
+          done < commit_hashes.txt
 
           # Push the new cherry-pick branch to the repository
           git push origin $cherry_pick_branch
 
-      # Step 5: Create a pull request to merge the cherry-pick branch into the target branch
+      # Step 6: Create a pull request to merge the cherry-pick branch into the target branch
       - name: Create Pull Request to Target Branch
         uses: peter-evans/create-pull-request@v4
         with:
