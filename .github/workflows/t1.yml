@@ -120,8 +120,9 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: $cherry_pick_branch
           base: ${{ env.TARGET_BRANCH }}
-          title: "Consolidated PRs for Pre-Release - ${{ env.TARGET_BRANCH }}"
+          title: "Consolidated PRs for Pre-Release - ${{ env.TARGET_BRANCH }} - $(date +'%Y%m%d%H%M%S')"
           body: |
             This PR includes cherry-picked changes from closed PRs in milestone '${{ env.MILESTONE_NAME }}'.
+
             Included PRs:
-            $(cat pr_numbers.txt | awk '{print "- " $1}')
+            $(awk '{print "- #" $1}' pr_numbers.txt)
