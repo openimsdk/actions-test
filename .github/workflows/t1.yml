@@ -1,5 +1,9 @@
 name: Create Pre-Release PR from Milestone
 
+permissions:
+  contents: write
+  pull-requests: write
+
 on:
   workflow_dispatch:
     inputs:
@@ -56,14 +60,18 @@ jobs:
                 -H "Accept: application/vnd.github+json" \
                 "https://api.github.com/repos/${{ github.repository }}/issues?milestone=$milestone_id&state=closed&per_page=100")
           echo "$issues" | jq -r '.[] | select(.pull_request != null) | .number' > pr_numbers.txt
-          echo "Parsed PR numbers:"
+          
+          # Sort PR numbers in ascending order
+          sort -n pr_numbers.txt -o pr_numbers.txt
+          
+          echo "Parsed and sorted PR numbers:"
           cat pr_numbers.txt || echo "No closed PR numbers found for milestone."
 
           pr_numbers=$(cat pr_numbers.txt | tr '\n' ' ')
           echo "PR_NUMBERS=$pr_numbers" >> $GITHUB_ENV
 
-      # Step 4: Fetch merge_commit_sha for each closed PR number
-      - name: Fetch Merge Commits for Closed PRs
+      # Step 4: Fetch merge_commit_sha for each closed PR number in sorted order
+      - name: Fetch Merge Commits for Sorted PRs
         run: |
           > commit_hashes.txt
 
@@ -77,7 +85,7 @@ jobs:
             fi
           done
 
-          echo "Parsed merge commits:"
+          echo "Parsed merge commits in sorted order:"
           cat commit_hashes.txt || echo "No merge commits found for closed PRs in milestone."
 
           commit_hashes=$(cat commit_hashes.txt | tr '\n' ' ')
@@ -88,6 +96,8 @@ jobs:
 
       # Step 5: Cherry-pick commits to a new branch and push it
       - name: Cherry-pick Commits to New Branch and Push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git fetch origin
           git checkout -b $TARGET_BRANCH origin/$TARGET_BRANCH
@@ -97,11 +107,11 @@ jobs:
 
           for commit_hash in $COMMIT_HASHES; do
             echo "Attempting to cherry-pick commit $commit_hash"
-            if ! git cherry-pick "$commit_hash"; then
-              echo "Cherry-pick failed for commit $commit_hash, aborting."
-              git cherry-pick --abort
-            fi
+            git cherry-pick "$commit_hash" --strategy=recursive -X theirs || git cherry-pick --continue
           done
+
+          # Configure remote URL with GITHUB_TOKEN for authentication
+          git remote set-url origin "https://${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
 
           # Push the cherry-pick branch to the remote repository
           git push origin $CHERRY_PICK_BRANCH
