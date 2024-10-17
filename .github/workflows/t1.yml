@@ -38,7 +38,6 @@ jobs:
         env:
           MILESTONE_NAME: ${{ env.MILESTONE_NAME }}
         run: |
-          # Fetch milestone ID based on milestone name
           milestones=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/${{ github.repository }}/milestones")
@@ -50,7 +49,6 @@ jobs:
           echo "Milestone ID: $milestone_id"
           echo "MILESTONE_ID=$milestone_id" >> $GITHUB_ENV
 
-          # Fetch all closed PR numbers for the specified milestone
           issues=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
                 -H "Accept: application/vnd.github+json" \
                 "https://api.github.com/repos/${{ github.repository }}/issues?milestone=$milestone_id&state=closed&per_page=100")
@@ -58,17 +56,14 @@ jobs:
           echo "Parsed PR numbers:"
           cat pr_numbers.txt || echo "No closed PR numbers found for milestone."
 
-          # Save PR numbers as environment variable
           pr_numbers=$(cat pr_numbers.txt | tr '\n' ' ')
           echo "PR_NUMBERS=$pr_numbers" >> $GITHUB_ENV
 
       # Step 4: Fetch merge_commit_sha for each closed PR number
       - name: Fetch Merge Commits for Closed PRs
         run: |
-          # Initialize commit hashes file
           > commit_hashes.txt
 
-          # Fetch merge_commit_sha for each closed PR
           for pr_number in $PR_NUMBERS; do
             echo "Processing PR #$pr_number"
             merge_commit=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
@@ -82,34 +77,41 @@ jobs:
           echo "Parsed merge commits:"
           cat commit_hashes.txt || echo "No merge commits found for closed PRs in milestone."
 
-          # Save commit hashes and cherry-pick branch name as environment variables
           commit_hashes=$(cat commit_hashes.txt | tr '\n' ' ')
           first_commit_hash=$(head -n 1 commit_hashes.txt)
           cherry_pick_branch="cherry-pick-${first_commit_hash:0:7}"
           echo "COMMIT_HASHES=$commit_hashes" >> $GITHUB_ENV
           echo "CHERRY_PICK_BRANCH=$cherry_pick_branch" >> $GITHUB_ENV
 
-      # Step 5: Cherry-pick all selected merge commits into a new branch
+      # Step 5: Cherry-pick commits and push branch as github-actions[bot]
       - name: Cherry-pick Commits and Push Branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git fetch origin
+          git fetch --all
           git checkout -b $TARGET_BRANCH origin/$TARGET_BRANCH
           git pull origin $TARGET_BRANCH
           git checkout -b $CHERRY_PICK_BRANCH
 
-          # Cherry-pick each commit
           for commit_hash in $COMMIT_HASHES; do
             echo "Attempting to cherry-pick commit $commit_hash"
+
+            # Verify that the commit hash exists locally
+            if ! git cat-file -e "$commit_hash" 2>/dev/null; then
+              echo "Commit $commit_hash does not exist in the local repository. Skipping."
+              continue
+            fi
+
+            # Attempt to cherry-pick the commit
             if ! git cherry-pick "$commit_hash"; then
               echo "Cherry-pick failed for commit $commit_hash, aborting."
               git cherry-pick --abort
             fi
           done
 
-          # Pull and rebase to ensure branch is up to date
           git pull --rebase origin $CHERRY_PICK_BRANCH
           
-          # Push the new cherry-pick branch to the repository
+          git remote set-url origin "https://$GITHUB_TOKEN@github.com/${{ github.repository }}.git"
           git push origin $CHERRY_PICK_BRANCH
 
       # Step 6: Create a pull request to merge the cherry-pick branch into the target branch
