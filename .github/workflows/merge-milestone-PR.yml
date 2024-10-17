@@ -36,12 +36,10 @@ jobs:
       - name: Fetch Milestone ID
         id: get_milestone_id
         run: |
-          # Fetch all milestones and find the ID for the specified milestone name
           milestones=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/${{ github.repository }}/milestones")
 
-          # Extract the milestone ID based on milestone title
           milestone_id=$(echo "$milestones" | grep -B3 "\"title\": \"$MILESTONE_NAME\"" | grep '"number":' | head -n1 | grep -o '[0-9]\+')
           if [ -z "$milestone_id" ]; then
             echo "Milestone '$MILESTONE_NAME' not found. Exiting."
@@ -51,42 +49,51 @@ jobs:
           echo "Milestone ID: $milestone_id"
           echo "MILESTONE_ID=$milestone_id" >> $GITHUB_ENV
 
-      # Step 4: Fetch closed issues with specified milestone ID and filter for PRs
-      - name: Fetch Closed PRs from Milestone ID and Extract Merge Commits
+      # Step 4: Fetch all closed PR numbers for the specified milestone
+      - name: Fetch Closed PR Numbers for Milestone
         run: |
           # Fetch all closed issues (including PRs) with the specified milestone ID
           issues=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
                 -H "Accept: application/vnd.github+json" \
                 "https://api.github.com/repos/${{ github.repository }}/issues?milestone=${{ env.MILESTONE_ID }}&state=closed&per_page=100")
 
-          # Initialize files to store PR numbers and commit hashes
+          # Initialize file to store PR numbers
           > pr_numbers.txt
+
+          # Extract closed PR numbers
+          echo "$issues" | jq -r '.[] | select(.pull_request != null) | .number' >> pr_numbers.txt
+
+          # Display parsed PR numbers
+          echo "Parsed PR numbers:"
+          cat pr_numbers.txt || echo "No closed PR numbers found for milestone."
+
+      # Step 5: Fetch merge_commit_sha for each closed PR number
+      - name: Fetch Merge Commits for Closed PRs
+        run: |
+          # Initialize file to store commit hashes
           > commit_hashes.txt
 
-          # Loop over each issue and filter only PRs
-          echo "$issues" | grep -E '"number":|"pull_request":' | while read -r line; do
-            if [[ $line == *'"number":'* ]]; then
-              pr_number=$(echo "$line" | grep -o '[0-9]\+')
-            elif [[ $line == *'"pull_request":'* ]]; then
-              # Confirm it's a PR by presence of "pull_request" field, add to pr_numbers.txt
+          # Loop through PR numbers and fetch merge_commit_sha
+          while IFS= read -r pr_number; do
+            echo "Processing PR #$pr_number"
+
+            # Fetch merge_commit_sha for the PR
+            merge_commit=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/pulls/$pr_number" | jq -r '.merge_commit_sha')
+
+            # Check if merge_commit_sha exists and write to file
+            if [ "$merge_commit" != "null" ]; then
               echo "#$pr_number" >> pr_numbers.txt
-              # Get the merge_commit_sha using another API call for each PR
-              merge_commit=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-                -H "Accept: application/vnd.github+json" \
-                "https://api.github.com/repos/${{ github.repository }}/pulls/$pr_number" | grep '"merge_commit_sha":' | grep -o '"[a-f0-9]\{40\}"' | tr -d '"')
-              if [[ -n "$merge_commit" ]]; then
-                echo "$merge_commit" >> commit_hashes.txt
-              fi
+              echo "$merge_commit" >> commit_hashes.txt
             fi
-          done
+          done < pr_numbers.txt
 
-          # Display parsed PR numbers and merge commits
-          echo "Parsed PR numbers:"
-          cat pr_numbers.txt || echo "No PR numbers found for milestone."
+          # Display merge commits
           echo "Parsed merge commits:"
-          cat commit_hashes.txt || echo "No merge commits found for milestone."
+          cat commit_hashes.txt || echo "No merge commits found for closed PRs in milestone."
 
-      # Step 5: Cherry-pick all selected merge commits into a new branch
+      # Step 6: Cherry-pick all selected merge commits into a new branch
       - name: Cherry-pick Merged Commits and Create Branch
         run: |
           # Check if commit_hashes.txt has valid entries
@@ -116,7 +123,7 @@ jobs:
           # Push the new cherry-pick branch to the repository
           git push origin $cherry_pick_branch
 
-      # Step 6: Create a pull request to merge the cherry-pick branch into the target branch
+      # Step 7: Create a pull request to merge the cherry-pick branch into the target branch
       - name: Create Pull Request to Target Branch
         uses: peter-evans/create-pull-request@v4
         with:
