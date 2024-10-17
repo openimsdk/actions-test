@@ -3,7 +3,7 @@ name: Create Pre-Release PR from Milestone
 on:
   workflow_dispatch:  # Allows manual trigger
     inputs:
-      milestone:
+      milestone_name:
         description: 'Milestone name to collect closed PRs from'
         required: true
         default: 'v3.8.2'  # Default milestone name
@@ -15,7 +15,7 @@ on:
     - cron: '0 10 * * 0'  # Scheduled to run every Sunday at 10:00 UTC
 
 env:
-  MILESTONE_NAME: ${{ github.event.inputs.milestone || 'v3.8.2' }}
+  MILESTONE_NAME: ${{ github.event.inputs.milestone_name || 'v3.8.2' }}
   TARGET_BRANCH: ${{ github.event.inputs.target_branch || 'pre-release-v3.8.2' }}
 
 jobs:
@@ -32,47 +32,67 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-      # Step 3: Fetch closed PRs and filter by milestone name
-      - name: Fetch Closed PRs and Filter by Milestone
+      # Step 3: Fetch milestone ID based on milestone name
+      - name: Fetch Milestone ID
+        id: get_milestone_id
         run: |
-          # Fetch up to 100 closed PRs from the repository
-          prs=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-                -H "Accept: application/vnd.github+json" \
-                "https://api.github.com/repos/${{ github.repository }}/pulls?state=closed&per_page=100")
+          milestones=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/milestones")
 
-          # Initialize files to store PR numbers and commit hashes
+          milestone_id=$(echo "$milestones" | grep -B3 "\"title\": \"$MILESTONE_NAME\"" | grep '"number":' | head -n1 | grep -o '[0-9]\+')
+          if [ -z "$milestone_id" ]; then
+            echo "Milestone '$MILESTONE_NAME' not found. Exiting."
+            exit 1
+          fi
+
+          echo "Milestone ID: $milestone_id"
+          echo "MILESTONE_ID=$milestone_id" >> $GITHUB_ENV
+
+      # Step 4: Fetch all closed PR numbers for the specified milestone
+      - name: Fetch Closed PR Numbers for Milestone
+        run: |
+          # Fetch all closed issues (including PRs) with the specified milestone ID
+          issues=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/${{ github.repository }}/issues?milestone=${{ env.MILESTONE_ID }}&state=closed&per_page=100")
+
+          # Initialize file to store PR numbers
           > pr_numbers.txt
+
+          # Extract closed PR numbers
+          echo "$issues" | jq -r '.[] | select(.pull_request != null) | .number' >> pr_numbers.txt
+
+          # Display parsed PR numbers
+          echo "Parsed PR numbers:"
+          cat pr_numbers.txt || echo "No closed PR numbers found for milestone."
+
+      # Step 5: Fetch merge_commit_sha for each closed PR number
+      - name: Fetch Merge Commits for Closed PRs
+        run: |
+          # Initialize file to store commit hashes
           > commit_hashes.txt
 
-          # Parse PRs and filter by milestone name and merged status
-          echo "$prs" | grep -E '"number":|"merge_commit_sha":|"milestone":|"merged_at":' | while read -r line; do
-            if [[ $line == *'"milestone":'* && $line != *'"title": "'"$MILESTONE_NAME"'"'* ]]; then
-              skip_next="true"
-            elif [[ $line == *'"number":'* && -z "$skip_next" ]]; then
-              pr_number=$(echo "$line" | grep -o '[0-9]\+')
-              echo "#$pr_number" >> pr_numbers.txt
-            elif [[ $line == *'"merge_commit_sha":'* && -z "$skip_next" ]]; then
-              merge_commit=$(echo "$line" | grep -o '"[a-f0-9]\{40\}"' | tr -d '"')
-              if [[ -n "$merge_commit" ]]; then
-                echo "$merge_commit" >> commit_hashes.txt
-              fi
-            elif [[ $line == *'"merged_at":'* && -z "$skip_next" ]]; then
-              if [[ $line == *"null"* ]]; then
-                skip_next="true"
-                sed -i '$ d' pr_numbers.txt  # Remove last PR number if it's not merged
-              else
-                unset skip_next
-              fi
+          # Loop through PR numbers and fetch merge_commit_sha
+          while IFS= read -r pr_number; do
+            echo "Processing PR #$pr_number"
+
+            # Fetch merge_commit_sha for the PR
+            merge_commit=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/pulls/$pr_number" | jq -r '.merge_commit_sha')
+
+            # Check if merge_commit_sha exists and write to file
+            if [ "$merge_commit" != "null" ]; then
+              echo "$merge_commit" >> commit_hashes.txt
             fi
-          done
+          done < pr_numbers.txt
 
-          # Display parsed PR numbers and merge commits
-          echo "Parsed PR numbers:"
-          cat pr_numbers.txt || echo "No PR numbers found for milestone."
+          # Display merge commits
           echo "Parsed merge commits:"
-          cat commit_hashes.txt || echo "No merge commits found for milestone."
+          cat commit_hashes.txt || echo "No merge commits found for closed PRs in milestone."
 
-      # Step 4: Cherry-pick all selected merge commits into a new branch
+      # Step 6: Cherry-pick all selected merge commits into a new branch
       - name: Cherry-pick Merged Commits and Create Branch
         run: |
           # Check if commit_hashes.txt has valid entries
@@ -102,7 +122,7 @@ jobs:
           # Push the new cherry-pick branch to the repository
           git push origin $cherry_pick_branch
 
-      # Step 5: Create a pull request to merge the cherry-pick branch into the target branch
+      # Step 7: Create a pull request to merge the cherry-pick branch into the target branch
       - name: Create Pull Request to Target Branch
         uses: peter-evans/create-pull-request@v4
         with:
