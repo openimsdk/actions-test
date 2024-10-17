@@ -3,7 +3,6 @@ name: Create Pre-Release PR from Milestone
 permissions:
   contents: write
   pull-requests: write
-  workflows: write
 
 on:
   workflow_dispatch:
