@@ -93,10 +93,15 @@ jobs:
           first_commit_hash=$(head -n 1 commit_hashes.txt)
           cherry_pick_branch="cherry-pick-${first_commit_hash:0:7}"
 
-          git checkout ${{ env.TARGET_BRANCH }}
+          # Fetch all branches to ensure pre-release branch is accessible
+          git fetch origin
+
+          # Checkout pre-release target branch from origin and create new cherry-pick branch
+          git checkout -b ${{ env.TARGET_BRANCH }} origin/${{ env.TARGET_BRANCH }}
           git pull origin ${{ env.TARGET_BRANCH }}
           git checkout -b $cherry_pick_branch
 
+          # Perform cherry-pick for each commit individually
           while IFS= read -r commit_hash; do
             echo "Attempting to cherry-pick commit $commit_hash"
             if ! git cherry-pick "$commit_hash"; then
@@ -105,6 +110,7 @@ jobs:
             fi
           done < commit_hashes.txt
 
+          # Push the new cherry-pick branch to the repository
           git push origin $cherry_pick_branch
 
       # Step 7: Create a pull request to merge the cherry-pick branch into the target branch
