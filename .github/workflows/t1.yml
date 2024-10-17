@@ -32,30 +32,36 @@ jobs:
         env:
           MILESTONE: ${{ github.event.inputs.milestone }}
         run: |
-          # Fetch all closed PRs for the specified milestone
+          # Fetch all closed PRs for the specified milestone using the GitHub API
           prs=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
                 -H "Accept: application/vnd.github+json" \
-                "https://api.github.com/repos/${{ github.repository }}/issues?milestone=$MILESTONE&state=closed")
+                "https://api.github.com/repos/${{ github.repository }}/pulls?state=closed&milestone=$MILESTONE")
 
-          # Parse PR numbers and find their merge commits
-          echo "Parsing PR numbers and merge commits..."
+          # Initialize pr_commits.txt to store PR numbers and commit hashes
           > pr_commits.txt
           echo "$prs" | grep '"number":' | awk '{print $2}' | tr -d ',' | while read pr_number; do
+            # Find the merge commit for each PR
             merge_commit=$(git log --grep="Merge pull request #$pr_number" --pretty=format:"%H" -n 1)
             if [ -n "$merge_commit" ]; then
               echo "$pr_number:$merge_commit" >> pr_commits.txt
             fi
           done
 
-          # Display parsed PR numbers and their merge commits
+          # Display parsed PR numbers and merge commits
           echo "Parsed PR numbers and merge commits:"
-          cat pr_commits.txt
+          cat pr_commits.txt || echo "No PRs found for milestone."
 
       # Step 4: Cherry-pick all selected merge commits into a new branch
       - name: Cherry-pick Merged Commits and Create Branch
         env:
           TARGET_BRANCH: ${{ github.event.inputs.target_branch }}
         run: |
+          # Check if pr_commits.txt has valid entries
+          if [ ! -s pr_commits.txt ]; then
+            echo "No valid PRs found with merge commits. Exiting."
+            exit 1
+          fi
+
           # Read merge commit hashes from pr_commits.txt
           commit_hashes=$(awk -F':' '{print $2}' pr_commits.txt | tr '\n' ' ')
 
