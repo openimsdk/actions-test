@@ -90,8 +90,8 @@ jobs:
           echo "COMMIT_HASHES=$commit_hashes" >> $GITHUB_ENV
           echo "CHERRY_PICK_BRANCH=$cherry_pick_branch" >> $GITHUB_ENV
 
-      # Step 5: Cherry-pick commits to a new branch
-      - name: Cherry-pick Commits to New Branch
+      # Step 5: Cherry-pick commits to a new branch and push it
+      - name: Cherry-pick Commits to New Branch and Push
         run: |
           git fetch origin
           git checkout -b $TARGET_BRANCH origin/$TARGET_BRANCH
@@ -107,8 +107,11 @@ jobs:
             fi
           done
 
+          # Push the cherry-pick branch to the remote repository
+          git push origin $CHERRY_PICK_BRANCH
+
       # Step 6: Create a pull request to merge the new branch into TARGET_BRANCH (using script)
-      - name: Create Pull Request
+      - name: Create Pull Request (using script)
         run: |
           pr_title="Consolidated PRs for Pre-Release - $TARGET_BRANCH - $(cat pr_numbers.txt | awk '{printf "#%s ", $1}')"
           pr_body="This PR includes cherry-picked changes from closed PRs in milestone '${MILESTONE_NAME}'."
