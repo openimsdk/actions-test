@@ -60,16 +60,12 @@ jobs:
 
           echo "$issues" | jq -r '.[] | select(.pull_request != null) | .number' >> pr_numbers.txt
 
-          echo "Parsed PR numbers:"
-          cat pr_numbers.txt || echo "No closed PR numbers found for milestone."
-
       # Step 5: Fetch merge_commit_sha for each closed PR number
       - name: Fetch Merge Commits for Closed PRs
         run: |
           > commit_hashes.txt
 
           while IFS= read -r pr_number; do
-            echo "Processing PR #$pr_number"
             merge_commit=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
               -H "Accept: application/vnd.github+json" \
               "https://api.github.com/repos/${{ github.repository }}/pulls/$pr_number" | jq -r '.merge_commit_sha')
@@ -78,9 +74,6 @@ jobs:
               echo "$merge_commit" >> commit_hashes.txt
             fi
           done < pr_numbers.txt
-
-          echo "Parsed merge commits:"
-          cat commit_hashes.txt || echo "No merge commits found for closed PRs in milestone."
 
       # Step 6: Cherry-pick all selected merge commits into a new branch
       - name: Cherry-pick Merged Commits and Create Branch
@@ -104,6 +97,10 @@ jobs:
             fi
           done < commit_hashes.txt
 
+          # Pull and rebase to update local branch before pushing
+          git pull --rebase origin $cherry_pick_branch
+          
+          # Push the new cherry-pick branch to the repository
           git push origin $cherry_pick_branch
 
       # Step 7: Create a pull request to merge the cherry-pick branch into the target branch
@@ -111,7 +108,7 @@ jobs:
         uses: peter-evans/create-pull-request@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          branch: $cherry_pick_branch
+          branch: ${{ steps.cherry_pick_milestone_prs.outputs.branch_name }}
           base: ${{ env.TARGET_BRANCH }}
           title: |
             Consolidated PRs for Pre-Release - ${{ env.TARGET_BRANCH }} - $(awk '{printf "#%s ", $1}' pr_numbers.txt)
