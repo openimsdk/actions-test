@@ -93,27 +93,17 @@ jobs:
           first_commit_hash=$(head -n 1 commit_hashes.txt)
           cherry_pick_branch="cherry-pick-${first_commit_hash:0:7}"
 
-          # Fetch all branches to ensure pre-release branch is accessible
           git fetch origin
-
-          # Checkout pre-release target branch from origin and create new cherry-pick branch
           git checkout -b ${{ env.TARGET_BRANCH }} origin/${{ env.TARGET_BRANCH }}
           git pull origin ${{ env.TARGET_BRANCH }}
           git checkout -b $cherry_pick_branch
 
-          # Perform cherry-pick for each commit individually
           while IFS= read -r commit_hash; do
-            echo "Attempting to cherry-pick commit $commit_hash"
             if ! git cherry-pick "$commit_hash"; then
-              echo "Cherry-pick failed for commit $commit_hash, skipping..."
               git cherry-pick --abort
             fi
           done < commit_hashes.txt
 
-          # Pull and rebase to update local branch before pushing
-          git pull --rebase origin $cherry_pick_branch
-
-          # Push the new cherry-pick branch to the repository
           git push origin $cherry_pick_branch
 
       # Step 7: Create a pull request to merge the cherry-pick branch into the target branch
@@ -123,9 +113,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: $cherry_pick_branch
           base: ${{ env.TARGET_BRANCH }}
-          title: "Consolidated PRs for Pre-Release - ${{ env.TARGET_BRANCH }} - $(date +'%Y%m%d%H%M%S')"
+          title: |
+            Consolidated PRs for Pre-Release - ${{ env.TARGET_BRANCH }} - $(awk '{printf "#%s ", $1}' pr_numbers.txt)
           body: |
             This PR includes cherry-picked changes from closed PRs in milestone '${{ env.MILESTONE_NAME }}'.
-
-            Included PRs:
-            $(awk '{print "- #" $1}' pr_numbers.txt)
