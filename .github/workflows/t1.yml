@@ -11,6 +11,12 @@ on:
         description: 'Target branch to merge the consolidated PR'
         required: true
         default: 'pre-release-v3.8.2'  # Default target branch
+  schedule:
+    - cron: '0 10 * * 0'  # Scheduled to run every Sunday at 10:00 UTC
+
+env:
+  MILESTONE_NAME: ${{ github.event.inputs.milestone || 'v3.8.2' }}
+  TARGET_BRANCH: ${{ github.event.inputs.target_branch || 'pre-release-v3.8.2' }}
 
 jobs:
   cherry_pick_milestone_prs:
@@ -26,44 +32,21 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-      # Step 3: Fetch milestone ID based on milestone name
-      - name: Fetch Milestone ID
-        id: get_milestone_id
-        env:
-          MILESTONE: ${{ github.event.inputs.milestone }}
-        run: |
-          # Fetch the list of milestones and extract the ID for the specified milestone
-          milestone_data=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${{ github.repository }}/milestones")
-
-          # Extract milestone ID based on milestone title
-          milestone_id=$(echo "$milestone_data" | grep -B3 "\"title\": \"$MILESTONE\"" | grep '"number":' | head -n1 | grep -o '[0-9]\+')
-          if [ -z "$milestone_id" ]; then
-            echo "Milestone '$MILESTONE' not found. Exiting."
-            exit 1
-          fi
-
-          echo "Milestone ID: $milestone_id"
-          echo "MILESTONE_ID=$milestone_id" >> $GITHUB_ENV
-
-      # Step 4: Fetch closed PRs with the specified milestone ID and extract merge_commit_sha
+      # Step 3: Fetch closed and merged PRs for the specified milestone
       - name: Fetch Closed PRs and Merge Commits
-        env:
-          MILESTONE_ID: ${{ env.MILESTONE_ID }}
         run: |
           # Fetch all closed PRs from the repository
           prs=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
                 -H "Accept: application/vnd.github+json" \
                 "https://api.github.com/repos/${{ github.repository }}/pulls?state=closed")
 
-          # Initialize files to store PR numbers and merge commit hashes
+          # Initialize files to store PR numbers and commit hashes
           > pr_numbers.txt
           > commit_hashes.txt
 
-          # Parse only PRs with the specified milestone ID and extract merge_commit_sha
+          # Parse PRs and filter by milestone name and merged status
           echo "$prs" | grep -E '"number":|"merge_commit_sha":|"milestone":|"merged_at":' | while read -r line; do
-            if [[ $line == *'"milestone":'* && $line != *"\"number\": $MILESTONE_ID"* ]]; then
+            if [[ $line == *'"milestone":'* && $line != *'"title": "'"$MILESTONE_NAME"'"'* ]]; then
               skip_next="true"
             elif [[ $line == *'"number":'* && -z "$skip_next" ]]; then
               pr_number=$(echo "$line" | grep -o '[0-9]\+')
@@ -89,10 +72,8 @@ jobs:
           echo "Parsed merge commits:"
           cat commit_hashes.txt || echo "No merge commits found for milestone."
 
-      # Step 5: Cherry-pick all selected merge commits into a new branch
+      # Step 4: Cherry-pick all selected merge commits into a new branch
       - name: Cherry-pick Merged Commits and Create Branch
-        env:
-          TARGET_BRANCH: ${{ github.event.inputs.target_branch }}
         run: |
           # Check if commit_hashes.txt has valid entries
           if [ ! -s commit_hashes.txt ]; then
@@ -121,15 +102,15 @@ jobs:
           # Push the new cherry-pick branch to the repository
           git push origin $cherry_pick_branch
 
-      # Step 6: Create a pull request to merge the cherry-pick branch into the target branch
+      # Step 5: Create a pull request to merge the cherry-pick branch into the target branch
       - name: Create Pull Request to Target Branch
         uses: peter-evans/create-pull-request@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: $cherry_pick_branch
-          base: ${{ github.event.inputs.target_branch }}
-          title: "Consolidated PRs for Pre-Release - ${{ github.event.inputs.target_branch }}"
+          base: ${{ env.TARGET_BRANCH }}
+          title: "Consolidated PRs for Pre-Release - ${{ env.TARGET_BRANCH }}"
           body: |
-            This PR includes cherry-picked changes from closed PRs in milestone '${{ github.event.inputs.milestone }}'.
+            This PR includes cherry-picked changes from closed PRs in milestone '${{ env.MILESTONE_NAME }}'.
             Included PRs:
             $(cat pr_numbers.txt | awk '{print "- " $1}')
