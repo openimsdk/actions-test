@@ -52,65 +52,51 @@ jobs:
       # Step 4: Fetch all closed PR numbers for the specified milestone
       - name: Fetch Closed PR Numbers for Milestone
         run: |
-          # Fetch all closed issues (including PRs) with the specified milestone ID
           issues=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
                 -H "Accept: application/vnd.github+json" \
                 "https://api.github.com/repos/${{ github.repository }}/issues?milestone=${{ env.MILESTONE_ID }}&state=closed&per_page=100")
 
-          # Initialize file to store PR numbers
           > pr_numbers.txt
 
-          # Extract closed PR numbers
           echo "$issues" | jq -r '.[] | select(.pull_request != null) | .number' >> pr_numbers.txt
 
-          # Display parsed PR numbers
           echo "Parsed PR numbers:"
           cat pr_numbers.txt || echo "No closed PR numbers found for milestone."
 
       # Step 5: Fetch merge_commit_sha for each closed PR number
       - name: Fetch Merge Commits for Closed PRs
         run: |
-          # Initialize file to store commit hashes
           > commit_hashes.txt
 
-          # Loop through PR numbers and fetch merge_commit_sha
           while IFS= read -r pr_number; do
             echo "Processing PR #$pr_number"
-
-            # Fetch merge_commit_sha for the PR
             merge_commit=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
               -H "Accept: application/vnd.github+json" \
               "https://api.github.com/repos/${{ github.repository }}/pulls/$pr_number" | jq -r '.merge_commit_sha')
 
-            # Check if merge_commit_sha exists and write to file
             if [ "$merge_commit" != "null" ]; then
               echo "$merge_commit" >> commit_hashes.txt
             fi
           done < pr_numbers.txt
 
-          # Display merge commits
           echo "Parsed merge commits:"
           cat commit_hashes.txt || echo "No merge commits found for closed PRs in milestone."
 
       # Step 6: Cherry-pick all selected merge commits into a new branch
       - name: Cherry-pick Merged Commits and Create Branch
         run: |
-          # Check if commit_hashes.txt has valid entries
           if [ ! -s commit_hashes.txt ]; then
             echo "No valid PRs found with merge commits. Exiting."
             exit 1
           fi
 
-          # Generate a branch name using the first commit hash
           first_commit_hash=$(head -n 1 commit_hashes.txt)
           cherry_pick_branch="cherry-pick-${first_commit_hash:0:7}"
 
-          # Checkout main and create a new branch for cherry-pick
-          git checkout main
-          git pull origin main
+          git checkout ${{ env.TARGET_BRANCH }}
+          git pull origin ${{ env.TARGET_BRANCH }}
           git checkout -b $cherry_pick_branch
 
-          # Perform cherry-pick for each commit individually
           while IFS= read -r commit_hash; do
             echo "Attempting to cherry-pick commit $commit_hash"
             if ! git cherry-pick "$commit_hash"; then
@@ -119,7 +105,6 @@ jobs:
             fi
           done < commit_hashes.txt
 
-          # Push the new cherry-pick branch to the repository
           git push origin $cherry_pick_branch
 
       # Step 7: Create a pull request to merge the cherry-pick branch into the target branch
