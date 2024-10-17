@@ -32,17 +32,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Ensure full history is fetched
-          token: ${{ secrets.BOT_TOKEN }}  # Apply BOT_TOKEN for authentication
-        #   token: ${{ secrets.GITHUB_TOKEN }}  # Original GitHub token (commented out)
+          fetch-depth: 0
+          token: ${{ secrets.BOT_TOKEN }}
 
       # Step 2: Set up Git user details for commits
       - name: Setup Git
         run: |
           git config --global user.name "OpenIM-Robot"
           git config --global user.email "OpenIM-Robot@users.noreply.github.com"
-        #   git config --global user.name "github-actions[bot]"
-        #   git config --global user.email "github-actions[bot]@users.noreply.github.com"  # Original bot details (commented out)
 
       # Step 3: Fetch milestone ID and PR details
       - name: Fetch Milestone ID and PR Numbers
@@ -71,11 +68,40 @@ jobs:
           echo "Parsed and sorted PR numbers:"
           cat pr_numbers.txt || echo "No closed PR numbers found for milestone."
 
-          pr_numbers=$(cat pr_numbers.txt | tr '\n' ' ')
+      # Step 4: Filter out merged PRs based on target branch
+      - name: Filter Merged PRs
+        run: |
+          # Fetch commits that are unique to the target branch compared to main
+          commits=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/compare/main...${{ env.TARGET_BRANCH }}" | jq -r '.commits[].sha')
+
+          echo "$commits" > target_commits.txt
+          echo "Unique commits in target branch:"
+          cat target_commits.txt
+
+          # Filter out PR numbers that are already in the target branch
+          > filtered_pr_numbers.txt
+          while IFS= read -r pr_number; do
+            pr_commit_sha=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/pulls/$pr_number" | jq -r '.merge_commit_sha')
+
+            if grep -q "$pr_commit_sha" target_commits.txt; then
+              echo "PR #$pr_number is already merged into ${TARGET_BRANCH}, skipping..."
+            else
+              echo "$pr_number" >> filtered_pr_numbers.txt
+            fi
+          done < pr_numbers.txt
+
+          echo "Filtered PR numbers for cherry-pick:"
+          cat filtered_pr_numbers.txt || echo "No PRs to cherry-pick."
+
+          pr_numbers=$(cat filtered_pr_numbers.txt | tr '\n' ' ')
           echo "PR_NUMBERS=$pr_numbers" >> $GITHUB_ENV
 
-      # Step 4: Fetch merge_commit_sha for each closed PR number in sorted order
-      - name: Fetch Merge Commits for Sorted PRs
+      # Step 5: Fetch merge_commit_sha for each filtered PR number
+      - name: Fetch Merge Commits for Filtered PRs
         run: |
           > commit_hashes.txt
 
@@ -89,8 +115,8 @@ jobs:
             fi
           done
 
-          echo "Parsed merge commits in sorted order:"
-          cat commit_hashes.txt || echo "No merge commits found for closed PRs in milestone."
+          echo "Parsed merge commits for filtered PRs:"
+          cat commit_hashes.txt || echo "No merge commits found for filtered PRs."
 
           commit_hashes=$(cat commit_hashes.txt | tr '\n' ' ')
           first_commit_hash=$(head -n 1 commit_hashes.txt)
@@ -98,7 +124,7 @@ jobs:
           echo "COMMIT_HASHES=$commit_hashes" >> $GITHUB_ENV
           echo "CHERRY_PICK_BRANCH=$cherry_pick_branch" >> $GITHUB_ENV
 
-      # Step 5: Cherry-pick commits to a new branch and push it
+      # Step 6: Cherry-pick commits to a new branch and push it
       - name: Cherry-pick Commits to New Branch and Push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -117,15 +143,14 @@ jobs:
 
           # Configure remote URL with BOT_TOKEN for authentication
           git remote set-url origin "https://${BOT_TOKEN}@github.com/${{ github.repository }}.git"
-          # git remote set-url origin "https://${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"  # Original GitHub token URL (commented out)
 
           # Push the cherry-pick branch to the remote repository
           git push origin $CHERRY_PICK_BRANCH
 
-      # Step 6: Create a pull request to merge the new branch into TARGET_BRANCH (using script)
+      # Step 7: Create a pull request to merge the new branch into TARGET_BRANCH (using script)
       - name: Create Pull Request (using script)
         run: |
-          pr_title="Consolidated PRs for Pre-Release - $TARGET_BRANCH - $(cat pr_numbers.txt | awk '{printf "#%s ", $1}')"
+          pr_title="Consolidated PRs for Pre-Release - $TARGET_BRANCH - $(cat filtered_pr_numbers.txt | awk '{printf "#%s ", $1}')"
           pr_body="This PR includes cherry-picked changes from closed PRs in milestone '${MILESTONE_NAME}'."
 
           curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" \
