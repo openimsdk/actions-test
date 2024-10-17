@@ -79,21 +79,22 @@ jobs:
       # Step 4: Filter out merged PRs based on target branch
       - name: Filter Merged PRs
         run: |
-          # Fetch commits that are unique to the target branch compared to main
-          commits=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+          # Fetch all commits on the target branch
+          target_commits=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${{ github.repository }}/compare/main...${{ env.TARGET_BRANCH }}" | jq -r '.commits[].sha')
-          echo "$commits" > target_commits.txt
+            "https://api.github.com/repos/${{ github.repository }}/commits?sha=${{ env.TARGET_BRANCH }}&per_page=100" | jq -r '.[].sha')
 
-          # Filter out PR numbers and associated commit hashes that are already in the target branch
+          # Initialize filtered lists for PR numbers and commit hashes
           filtered_pr_numbers=""
           filtered_commit_hashes=""
+
+          # Check each PR's merge_commit_sha against the target branch commits
           while IFS= read -r pr_number; do
             pr_commit_sha=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
               -H "Accept: application/vnd.github+json" \
               "https://api.github.com/repos/${{ github.repository }}/pulls/$pr_number" | jq -r '.merge_commit_sha')
 
-            if grep -q "$pr_commit_sha" target_commits.txt; then
+            if echo "$target_commits" | grep -q "$pr_commit_sha"; then
               echo "PR #$pr_number with commit $pr_commit_sha is already merged into ${TARGET_BRANCH}, skipping..."
             else
               filtered_pr_numbers="$filtered_pr_numbers $pr_number"
@@ -104,7 +105,6 @@ jobs:
           # Set filtered PR numbers and commit hashes as environment variables
           echo "FILTERED_PR_NUMBERS=$filtered_pr_numbers" >> $GITHUB_ENV
           echo "FILTERED_COMMIT_HASHES=$filtered_commit_hashes" >> $GITHUB_ENV
-          rm -f target_commits.txt
 
           echo "Filtered PR numbers:"
           echo "$filtered_pr_numbers"
@@ -117,15 +117,22 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         run: |
+          # Check if there are commits to cherry-pick
+          if [ -z "$FILTERED_COMMIT_HASHES" ]; then
+            echo "No commits to cherry-pick. Exiting."
+            exit 0
+          fi
+
           git fetch origin
           git checkout -b $TARGET_BRANCH origin/$TARGET_BRANCH
           git pull origin $TARGET_BRANCH
 
-          git checkout -b $CHERRY_PICK_BRANCH
+          # Create cherry-pick branch based on the first filtered commit hash
+          first_commit_hash=$(echo "$FILTERED_COMMIT_HASHES" | awk '{print $1}')
+          cherry_pick_branch="cherry-pick-${first_commit_hash:0:7}"
+          git checkout -b $cherry_pick_branch
 
-          # Remove temporary files before starting cherry-pick to avoid untracked files
-          rm -f target_commits.txt
-
+          # Cherry-pick commits
           for commit_hash in $FILTERED_COMMIT_HASHES; do
             echo "Attempting to cherry-pick commit $commit_hash"
             if ! git cherry-pick "$commit_hash" --strategy=recursive -X theirs; then
@@ -144,7 +151,7 @@ jobs:
           # git remote set-url origin "https://${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"  # Original GitHub token for push (commented out)
 
           # Push the cherry-pick branch to the remote repository
-          git push origin $CHERRY_PICK_BRANCH
+          git push origin $cherry_pick_branch
 
       # Step 6: Create a pull request to merge the new branch into TARGET_BRANCH (using script)
       - name: Create Pull Request (using script)
@@ -157,7 +164,7 @@ jobs:
             https://api.github.com/repos/${{ github.repository }}/pulls \
             -d "$(jq -n \
               --arg title "$pr_title" \
-              --arg head "$CHERRY_PICK_BRANCH" \
+              --arg head "$cherry_pick_branch" \
               --arg base "$TARGET_BRANCH" \
               --arg body "$pr_body" \
               '{title: $title, head: $head, base: $base, body: $body}')"
