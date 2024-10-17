@@ -1,137 +1,121 @@
-name: Create Pre-Release PR from Milestone
+name: Merge for Closed Milestone PRs
 
 on:
-  workflow_dispatch:  # Allows manual trigger
+  workflow_dispatch:  # Manual trigger
     inputs:
-      milestone_name:
+      milestone:
         description: 'Milestone name to collect closed PRs from'
         required: true
-        default: 'v3.8.2'  # Default milestone name
+        default: 'v3.8.2'  # Default milestone set to v3.8.2
       target_branch:
         description: 'Target branch to merge the consolidated PR'
         required: true
-        default: 'pre-release-v3.8.2'  # Default target branch
+        default: 'pre-release-v3.8.2'  # Default target branch with pre-release-v*.*.* format
   schedule:
-    - cron: '0 10 * * 0'  # Scheduled to run every Sunday at 10:00 UTC
-
-env:
-  MILESTONE_NAME: ${{ github.event.inputs.milestone_name || 'v3.8.2' }}
-  TARGET_BRANCH: ${{ github.event.inputs.target_branch || 'pre-release-v3.8.2' }}
+    - cron: '0 0 * * 0'  # Scheduled to run every Sunday at 00:00 UTC
 
 jobs:
-  cherry_pick_milestone_prs:
+  cherry_pick_closed_milestone_prs:
     runs-on: ubuntu-latest
     steps:
-      # Step 1: Checkout repository code
+      # Step 1: Checkout the repository code
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Step 2: Set up Git user details for commits
+      # Step 2: Set up Git user details for making commits
       - name: Setup Git
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-      # Step 3: Fetch milestone ID based on milestone name
-      - name: Fetch Milestone ID
-        id: get_milestone_id
+      # Step 3: Fetch closed PRs from the specified milestone using GitHub API and parse with a script
+      - name: Fetch and Filter Closed PRs
+        id: fetch_prs
         run: |
-          milestones=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${{ github.repository }}/milestones")
+          milestone="${{ github.event.inputs.milestone }}"
+          target_branch="${{ github.event.inputs.target_branch }}"
+          
+          # Initialize environment variable for PR branches
+          echo "PR_BRANCHES=" >> $GITHUB_ENV
 
-          milestone_id=$(echo "$milestones" | grep -B3 "\"title\": \"$MILESTONE_NAME\"" | grep '"number":' | head -n1 | grep -o '[0-9]\+')
-          if [ -z "$milestone_id" ]; then
-            echo "Milestone '$MILESTONE_NAME' not found. Exiting."
-            exit 1
-          fi
-
-          echo "Milestone ID: $milestone_id"
-          echo "MILESTONE_ID=$milestone_id" >> $GITHUB_ENV
-
-      # Step 4: Fetch all closed PR numbers for the specified milestone
-      - name: Fetch Closed PR Numbers for Milestone
-        run: |
-          # Fetch all closed issues (including PRs) with the specified milestone ID
-          issues=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+          # Fetch closed PRs for the specified milestone
+          prs=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
                 -H "Accept: application/vnd.github+json" \
-                "https://api.github.com/repos/${{ github.repository }}/issues?milestone=${{ env.MILESTONE_ID }}&state=closed&per_page=100")
+                "https://api.github.com/repos/${{ github.repository }}/pulls?state=closed&milestone=$milestone")
 
-          # Initialize file to store PR numbers
-          > pr_numbers.txt
-
-          # Extract closed PR numbers
-          echo "$issues" | jq -r '.[] | select(.pull_request != null) | .number' >> pr_numbers.txt
-
-          # Display parsed PR numbers
-          echo "Parsed PR numbers:"
-          cat pr_numbers.txt || echo "No closed PR numbers found for milestone."
-
-      # Step 5: Fetch merge_commit_sha for each closed PR number
-      - name: Fetch Merge Commits for Closed PRs
-        run: |
-          # Initialize file to store commit hashes
-          > commit_hashes.txt
-
-          # Loop through PR numbers and fetch merge_commit_sha
-          while IFS= read -r pr_number; do
-            echo "Processing PR #$pr_number"
-
-            # Fetch merge_commit_sha for the PR
-            merge_commit=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-              -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/repos/${{ github.repository }}/pulls/$pr_number" | jq -r '.merge_commit_sha')
-
-            # Check if merge_commit_sha exists and write to file
-            if [ "$merge_commit" != "null" ]; then
-              echo "#$pr_number" >> pr_numbers.txt
-              echo "$merge_commit" >> commit_hashes.txt
+          # Parse PR numbers and head_ref branches
+          echo "$prs" | grep '"number":\|"head":' | while read -r line; do
+            if [[ $line == *'"number":'* ]]; then
+              pr_number=$(echo "$line" | grep -o '[0-9]\+')
+            elif [[ $line == *'"ref":'* ]]; then
+              head_ref=$(echo "$line" | grep -o '"ref": *"[^"]*' | grep -o '[^"]*$')
+              
+              # Append PR number and head_ref to PR_BRANCHES env variable
+              if [[ -n "$head_ref" ]]; then
+                echo "PR #$pr_number with branch $head_ref ready for cherry-pick"
+                echo "PR_BRANCHES+=\"$pr_number:$head_ref \"" >> $GITHUB_ENV
+              fi
             fi
-          done < pr_numbers.txt
-
-          # Display merge commits
-          echo "Parsed merge commits:"
-          cat commit_hashes.txt || echo "No merge commits found for closed PRs in milestone."
-
-      # Step 6: Cherry-pick all selected merge commits into a new branch
-      - name: Cherry-pick Merged Commits and Create Branch
+          done
+          
+      # Step 4: Create a new branch from main, cherry-pick PRs, and push to remote
+      - name: Create and Cherry-pick Branch
+        if: ${{ github.env.PR_BRANCHES != '' }}
         run: |
-          # Check if commit_hashes.txt has valid entries
-          if [ ! -s commit_hashes.txt ]; then
-            echo "No valid PRs found with merge commits. Exiting."
-            exit 1
-          fi
+          cherry_pick_branch="milestone-cherry-pick-$(date +%Y%m%d%H%M%S)"
+          target_branch="${{ github.event.inputs.target_branch }}"
 
-          # Generate a branch name using the first commit hash
-          first_commit_hash=$(head -n 1 commit_hashes.txt)
-          cherry_pick_branch="cherry-pick-${first_commit_hash:0:7}"
-
-          # Checkout main and create a new branch for cherry-pick
+          # Verify and fetch the latest for the target branch
+          git fetch origin $target_branch:$target_branch || exit 1
+          
+          # Switch to main branch, pull latest changes, then create a new cherry-pick branch
           git checkout main
           git pull origin main
           git checkout -b $cherry_pick_branch
 
-          # Perform cherry-pick for each commit individually
-          while IFS= read -r commit_hash; do
-            echo "Attempting to cherry-pick commit $commit_hash"
-            if ! git cherry-pick "$commit_hash"; then
-              echo "Cherry-pick failed for commit $commit_hash, skipping..."
-              git cherry-pick --abort
-            fi
-          done < commit_hashes.txt
+          # Read each PR and its head_ref branch from the PR_BRANCHES env variable
+          touch conflict_commits.txt
+          for pr_data in $PR_BRANCHES; do
+            pr_number="${pr_data%%:*}"
+            head_ref="${pr_data#*:}"
 
-          # Push the new cherry-pick branch to the repository
+            # Fetch the latest commit from the PR's head_ref branch
+            git fetch origin $head_ref || { echo "Failed to fetch head branch for PR #$pr_number"; continue; }
+            latest_commit=$(git rev-parse FETCH_HEAD)
+
+            # Check if the latest commit is already in the target branch
+            if git merge-base --is-ancestor $latest_commit $target_branch 2>/dev/null; then
+              echo "Skipping PR #$pr_number - Commit $latest_commit already in $target_branch"
+            else
+              echo "Cherry-picking PR #$pr_number with commit $latest_commit"
+              if ! git cherry-pick $latest_commit; then
+                echo "Conflict in PR #$pr_number - Commit $latest_commit. Logging and continuing."
+                echo "$pr_number:$latest_commit" >> conflict_commits.txt
+                git cherry-pick --abort
+              fi
+            fi
+          done
+
+          # Push the cherry-pick branch to the remote repository
           git push origin $cherry_pick_branch
 
-      # Step 7: Create a pull request to merge the cherry-pick branch into the target branch
+          # Display any conflicts encountered
+          if [[ -s conflict_commits.txt ]]; then
+            echo "The following commits encountered conflicts during cherry-pick:"
+            cat conflict_commits.txt
+          fi
+
+      # Step 5: Create a single pull request to merge the cherry-pick branch into the target branch
       - name: Create Pull Request to Target Branch
+        if: ${{ github.env.PR_BRANCHES != '' }}
         uses: peter-evans/create-pull-request@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           branch: $cherry_pick_branch
-          base: ${{ env.TARGET_BRANCH }}
-          title: "Consolidated PRs for Pre-Release - ${{ env.TARGET_BRANCH }}"
+          base: ${{ github.event.inputs.target_branch }}
+          title: "Consolidated Closed Milestone PRs for ${{ github.event.inputs.target_branch }}"
           body: |
-            This PR includes cherry-picked changes from closed PRs in milestone '${{ env.MILESTONE_NAME }}'.
-            Included PRs:
-            $(cat pr_numbers.txt | awk '{print "- " $1}')
+            This PR includes all cherry-picked changes from closed PRs in milestone '${{ github.event.inputs.milestone }}' to ${{ github.event.inputs.target_branch }}.
+            
+            The following commits encountered conflicts during cherry-pick:
+            $(cat conflict_commits.txt || echo "No conflicts.")
