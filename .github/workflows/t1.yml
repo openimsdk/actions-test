@@ -36,16 +36,8 @@ jobs:
           token: ${{ secrets.BOT_TOKEN }}
         #   token: ${{ secrets.GITHUB_TOKEN }}  # Original GitHub token (commented out)
 
-      # Step 2: Set up Git user details for commits
-      - name: Setup Git
-        run: |
-          git config --global user.name "OpenIM-Robot"
-          git config --global user.email "OpenIM-Robot@users.noreply.github.com"
-        #   git config --global user.name "github-actions[bot]"
-        #   git config --global user.email "github-actions[bot]@users.noreply.github.com"  # Original GitHub bot user details (commented out)
-
-      # Step 3: Fetch milestone ID and PR details
-      - name: Fetch Milestone ID and PR Numbers
+      # Step 2: Fetch milestone ID, PR numbers, and filter out already cherry-picked PRs
+      - name: Fetch Milestone ID and Filter PRs
         env:
           MILESTONE_NAME: ${{ env.MILESTONE_NAME }}
         run: |
@@ -63,46 +55,52 @@ jobs:
           issues=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
                 -H "Accept: application/vnd.github+json" \
                 "https://api.github.com/repos/${{ github.repository }}/issues?milestone=$milestone_id&state=closed&per_page=100")
-          echo "$issues" | jq -r '.[] | select(.pull_request != null) | .number' > pr_numbers.txt
-          
-          # Sort PR numbers in ascending order
-          sort -n pr_numbers.txt -o pr_numbers.txt
-
-          # Save PR numbers as an environment variable and delete the file
-          pr_numbers=$(cat pr_numbers.txt | tr '\n' ' ')
-          echo "PR_NUMBERS=$pr_numbers" >> $GITHUB_ENV
-          rm -f pr_numbers.txt
-          
-          echo "Filtered PR numbers for cherry-pick:"
-          echo "$PR_NUMBERS" || echo "No closed PR numbers found for milestone."
-
-      # Step 4: Filter out merged PRs based on target branch
-      - name: Filter Merged PRs
-        run: |
-          # Fetch all commits on the target branch
-          target_commits=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${{ github.repository }}/commits?sha=${{ env.TARGET_BRANCH }}&per_page=100" | jq -r '.[].sha')
+          pr_numbers=$(echo "$issues" | jq -r '.[] | select(.pull_request != null) | .number')
 
           # Initialize filtered lists for PR numbers and commit hashes
           filtered_pr_numbers=""
           filtered_commit_hashes=""
 
-          # Check each PR's merge_commit_sha against the target branch commits
-          while IFS= read -r pr_number; do
-            pr_commit_sha=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+          # Fetch target branch for content comparison
+          git fetch origin ${{ env.TARGET_BRANCH }}
+          git checkout ${{ env.TARGET_BRANCH }}
+
+          # Check each PR's files and contents
+          for pr_number in $pr_numbers; do
+            pr_data=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
               -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/repos/${{ github.repository }}/pulls/$pr_number" | jq -r '.merge_commit_sha')
+              "https://api.github.com/repos/${{ github.repository }}/pulls/$pr_number/files")
+            
+            all_files_exist=true
+            for file in $(echo "$pr_data" | jq -r '.[].filename'); do
+              # Check if file content in the PR matches the content in the target branch
+              pr_file_content=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/${{ github.repository }}/contents/$file?ref=pull/$pr_number/head" | jq -r '.content' | base64 --decode)
+              
+              target_file_content=$(cat "$file" 2>/dev/null || echo "")
 
-            if echo "$target_commits" | grep -q "$pr_commit_sha"; then
-              echo "PR #$pr_number with commit $pr_commit_sha is already merged into ${TARGET_BRANCH}, skipping..."
-            else
+              # If contents differ, mark as not fully contained in the target branch
+              if [ "$pr_file_content" != "$target_file_content" ]; then
+                all_files_exist=false
+                break
+              fi
+            done
+
+            # Add PR if any of its file contents are not in the target branch
+            if [ "$all_files_exist" = "false" ]; then
+              echo "PR #$pr_number contains changes not in ${TARGET_BRANCH}, including for cherry-pick."
               filtered_pr_numbers="$filtered_pr_numbers $pr_number"
-              filtered_commit_hashes="$filtered_commit_hashes $pr_commit_sha"
+              first_pr_commit_sha=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/${{ github.repository }}/pulls/$pr_number/commits" | jq -r '.[0].sha')
+              filtered_commit_hashes="$filtered_commit_hashes $first_pr_commit_sha"
+            else
+              echo "PR #$pr_number already fully exists in ${TARGET_BRANCH}, skipping..."
             fi
-          done <<< "$PR_NUMBERS"
+          done
 
-          # Set filtered PR numbers and commit hashes as environment variables
+          # Save filtered PR numbers and commit hashes as environment variables
           echo "FILTERED_PR_NUMBERS=$filtered_pr_numbers" >> $GITHUB_ENV
           echo "FILTERED_COMMIT_HASHES=$filtered_commit_hashes" >> $GITHUB_ENV
 
@@ -111,7 +109,7 @@ jobs:
           echo "Filtered commit hashes:"
           echo "$filtered_commit_hashes"
 
-      # Step 5: Cherry-pick commits to a new branch and push it
+      # Step 3: Cherry-pick commits to a new branch and push it
       - name: Cherry-pick Commits to New Branch and Push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -153,9 +151,15 @@ jobs:
           # Push the cherry-pick branch to the remote repository
           git push origin $cherry_pick_branch
 
-      # Step 6: Create a pull request to merge the new branch into TARGET_BRANCH (using script)
+      # Step 4: Create a pull request to merge the new branch into TARGET_BRANCH (using script)
       - name: Create Pull Request (using script)
         run: |
+          # Check if there are filtered PRs to create a title and pull request
+          if [ -z "$FILTERED_PR_NUMBERS" ] || [ -z "$FILTERED_COMMIT_HASHES" ]; then
+            echo "No PRs to include in the cherry-pick. Skipping pull request creation."
+            exit 0
+          fi
+
           pr_title="Consolidated PRs for Pre-Release - $TARGET_BRANCH - $(echo $FILTERED_PR_NUMBERS | awk '{printf "#%s ", $1}')"
           pr_body="This PR includes cherry-picked changes from closed PRs in milestone '${MILESTONE_NAME}'."
 
@@ -168,14 +172,3 @@ jobs:
               --arg base "$TARGET_BRANCH" \
               --arg body "$pr_body" \
               '{title: $title, head: $head, base: $base, body: $body}')"
-
-    #   - name: Create Pull Request
-    #     uses: peter-evans/create-pull-request@v4
-    #     with:
-    #       token: ${{ secrets.GITHUB_TOKEN }}
-    #       branch: ${{ env.CHERRY_PICK_BRANCH }}
-    #       base: $TARGET_BRANCH
-    #       title: |
-    #         Consolidated PRs for Pre-Release - $TARGET_BRANCH - $(awk '{printf "#%s ", $1}' pr_numbers.txt)
-    #       body: |
-    #         This PR includes cherry-picked changes from closed PRs in milestone '${{ env.MILESTONE_NAME }}'.
