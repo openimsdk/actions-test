@@ -37,36 +37,45 @@ jobs:
                 -H "Accept: application/vnd.github+json" \
                 "https://api.github.com/repos/${{ github.repository }}/pulls?state=closed&milestone=$MILESTONE")
 
-          # Initialize pr_commits.txt to store PR numbers and commit hashes
-          > pr_commits.txt
-          echo "$prs" | grep '"number":' | awk '{print $2}' | tr -d ',' | while read pr_number; do
-            # Find the merge commit for each PR
-            merge_commit=$(git log --grep="Merge pull request #$pr_number" --pretty=format:"%H" -n 1)
-            if [ -n "$merge_commit" ]; then
-              echo "$pr_number:$merge_commit" >> pr_commits.txt
+          # Initialize files to store PR numbers and commit hashes
+          > pr_numbers.txt
+          > commit_hashes.txt
+          
+          # Parse PR numbers and merge commit SHA
+          echo "$prs" | grep -E '"number":|"merge_commit_sha":' | while read -r line; do
+            if [[ $line == *'"number":'* ]]; then
+              pr_number=$(echo "$line" | grep -o '[0-9]\+')
+              echo "#$pr_number" >> pr_numbers.txt
+            elif [[ $line == *'"merge_commit_sha":'* ]]; then
+              merge_commit=$(echo "$line" | grep -o '"[a-f0-9]\{40\}"' | tr -d '"')
+              if [[ -n "$merge_commit" ]]; then
+                echo "$merge_commit" >> commit_hashes.txt
+              fi
             fi
           done
 
           # Display parsed PR numbers and merge commits
-          echo "Parsed PR numbers and merge commits:"
-          cat pr_commits.txt || echo "No PRs found for milestone."
+          echo "Parsed PR numbers:"
+          cat pr_numbers.txt || echo "No PR numbers found for milestone."
+          echo "Parsed merge commits:"
+          cat commit_hashes.txt || echo "No merge commits found for milestone."
 
       # Step 4: Cherry-pick all selected merge commits into a new branch
       - name: Cherry-pick Merged Commits and Create Branch
         env:
           TARGET_BRANCH: ${{ github.event.inputs.target_branch }}
         run: |
-          # Check if pr_commits.txt has valid entries
-          if [ ! -s pr_commits.txt ]; then
+          # Check if commit_hashes.txt has valid entries
+          if [ ! -s commit_hashes.txt ]; then
             echo "No valid PRs found with merge commits. Exiting."
             exit 1
           fi
 
-          # Read merge commit hashes from pr_commits.txt
-          commit_hashes=$(awk -F':' '{print $2}' pr_commits.txt | tr '\n' ' ')
+          # Read merge commit hashes from commit_hashes.txt
+          commit_hashes=$(tr '\n' ' ' < commit_hashes.txt)
 
           # Generate a branch name using the first commit hash
-          first_commit_hash=$(awk -F':' 'NR==1 {print $2}' pr_commits.txt)
+          first_commit_hash=$(head -n 1 commit_hashes.txt)
           cherry_pick_branch="cherry-pick-${first_commit_hash:0:7}"
 
           # Checkout main and create a new branch for cherry-pick
@@ -90,5 +99,5 @@ jobs:
           title: "Consolidated PRs for Pre-Release - ${{ github.event.inputs.target_branch }}"
           body: |
             This PR includes cherry-picked changes from closed PRs in milestone '${{ github.event.inputs.milestone }}'.
-            PRs and corresponding merge commits:
-            $(cat pr_commits.txt | awk '{print "- PR #" $1 " - Commit " $2}')
+            Included PRs:
+            $(cat pr_numbers.txt | awk '{print "- " $1}')
