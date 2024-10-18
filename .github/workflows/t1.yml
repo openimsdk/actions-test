@@ -111,15 +111,26 @@ jobs:
 
             # Construct the commit URL
             commit_url="https://github.com/${{ github.repository }}/commit/$merge_commit"
+            pr_url="https://github.com/${{ github.repository }}/pull/$pr_number"
+            
+            # Fetch associated issue (if any)
+            associated_issues=$(echo "$pr_details" | jq -r '.body' | grep -o '#[0-9]\+' | head -n 1)
+            issue_url="https://github.com/${{ github.repository }}/issues/${associated_issues#\#}"
 
             # Add commit hash to commit_hashes.txt if not null
             if [ "$merge_commit" != "null" ]; then
               echo "$merge_commit" >> commit_hashes.txt
             fi
 
-            # Append PR info to title and body
+            # Append PR info to title and body in required format
+            if [ -n "$associated_issues" ]; then
+              echo "* **$pr_title**: ([#$pr_number]($pr_url)) ([\`$short_commit_hash\`]($commit_url)), closes [#$associated_issues]($issue_url)" >> pr_body.txt
+            else
+              echo "* **$pr_title**: ([#$pr_number]($pr_url)) ([\`$short_commit_hash\`]($commit_url))" >> pr_body.txt
+            fi
+
+            # Append PR number for use in title
             echo "#$pr_number" >> pr_titles.txt
-            echo "- PR #$pr_number: $pr_title ([\`$short_commit_hash\`]($commit_url))" >> pr_body.txt
           done
 
           # Prepare PR title and body from collected data
@@ -127,6 +138,7 @@ jobs:
 
           echo "Prepared PR title:"
           echo "$pr_numbers_in_title"
+          echo "pr_numbers_in_title=$pr_numbers_in_title" >> $GITHUB_ENV
           echo "Prepared PR body:"
           cat pr_body.txt
 
@@ -169,21 +181,14 @@ jobs:
           # Push the cherry-pick branch
           git push origin $CHERRY_PICK_BRANCH --force
 
-      - name: Create Pull Request
-        env:
-          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-        run: |
-          pr_title=$(paste -sd " " pr_titles.txt)
-          pr_body=$(cat pr_body.txt)
-
-          curl -s -X POST -H "Authorization: token $BOT_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            https://api.github.com/repos/${{ github.repository }}/pulls \
-            -d "$(jq -n --arg title "Consolidated PRs: $pr_title" \
-              --arg head "$CHERRY_PICK_BRANCH" \
-              --arg base "$TARGET_BRANCH" \
-              --arg body "$pr_body" \
-              '{title: $title, head: $head, base: $base, body: $body}')"
+      - name: Create Pull Request using Action
+        uses: peter-evans/create-pull-request@v4
+        with:
+          token: ${{ secrets.BOT_TOKEN }}
+          branch: ${{ env.CHERRY_PICK_BRANCH }}
+          title: "deps: Merge ${{ env.pr_numbers_in_title }} PRs into ${{ env.TARGET_BRANCH }}"
+          body: |
+            $(cat pr_body.txt)
 
       - name: Label Successfully Cherry-Picked PRs
         if: ${{ success() }}
