@@ -138,7 +138,7 @@ jobs:
 
           echo "Prepared PR title:"
           echo "$pr_numbers_in_title"
-          echo "pr_numbers_in_title=$pr_numbers_in_title" >> $GITHUB_ENV
+          echo "$pr_numbers_in_title" >> $GITHUB_ENV  # Save the title as environment variable
           echo "Prepared PR body:"
           cat pr_body.txt
 
@@ -149,7 +149,7 @@ jobs:
           echo "COMMIT_HASHES=$commit_hashes" >> $GITHUB_ENV
           echo "CHERRY_PICK_BRANCH=$cherry_pick_branch" >> $GITHUB_ENV
 
-      - name: Pull and Cherry-pick Commits, Then Push
+      - name: Pull and Cherry-pick Commits
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
@@ -176,16 +176,12 @@ jobs:
             fi
           done
 
-          # Configure remote URL with BOT_TOKEN for authentication
-          git remote set-url origin "https://${BOT_TOKEN}@github.com/${{ github.repository }}.git"
-          # Push the cherry-pick branch
-          git push origin $CHERRY_PICK_BRANCH --force
-
       - name: Create Pull Request using Action
-        uses: peter-evans/create-pull-request@v4
+        uses: peter-evans/create-pull-request@v7.0.5
         with:
           token: ${{ secrets.BOT_TOKEN }}
           branch: ${{ env.CHERRY_PICK_BRANCH }}
+          base: $TARGET_BRANCH
           title: "deps: Merge ${{ env.pr_numbers_in_title }} PRs into ${{ env.TARGET_BRANCH }}"
           body: |
             $(cat pr_body.txt)
