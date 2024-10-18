@@ -16,8 +16,12 @@ on:
         description: 'Target branch to merge the consolidated PR'
         required: true
         default: 'pre-release-v3.8.2'
+
   schedule:
     - cron: '0 10 * * 0'
+
+  pull_request:
+    types: [closed]
 
 env:
   MILESTONE_NAME: ${{ github.event.inputs.milestone_name || 'v3.8.2' }}
@@ -28,6 +32,7 @@ env:
 
 jobs:
   cherry_pick_milestone_prs:
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -175,3 +180,29 @@ jobs:
               --arg body "$pr_body" \
               --argjson labels '["milestone-merge"]' \
               '{title: $title, head: $head, base: $base, body: $body, labels: $labels}')"
+
+  delete_temp_branch_and_label_prs:
+    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.BOT_TOKEN }}
+
+      - name: Delete Temporary Branch
+        env:
+          CHERRY_PICK_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          git push origin --delete $CHERRY_PICK_BRANCH
+          echo "Deleted temporary branch $CHERRY_PICK_BRANCH."
+
+      - name: Label Successfully Cherry-Picked PRs
+        run: |
+          for pr_number in $(cat pr_numbers.txt); do
+            curl -s -X POST -H "Authorization: token $BOT_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/issues/$pr_number/labels" \
+              -d "$(jq -n --arg label "${LABEL_NAME}" '{labels: [$label]}')"
+          done
