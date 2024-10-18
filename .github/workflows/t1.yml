@@ -61,10 +61,13 @@ jobs:
           # Sort PR numbers
           sorted_pr_numbers=$(echo "$pr_numbers" | sort -n)
 
-          echo "Sorted PR numbers:"
-          echo "$sorted_pr_numbers"
+          # Convert sorted PR numbers to a single line string
+          sorted_pr_numbers_single_line=$(echo "$sorted_pr_numbers" | tr '\n' ' ')
 
-          echo "SORTED_PR_NUMBERS=$sorted_pr_numbers" >> $GITHUB_ENV
+          echo "Sorted PR numbers:"
+          echo "$sorted_pr_numbers_single_line"
+
+          echo "SORTED_PR_NUMBERS=$sorted_pr_numbers_single_line" >> $GITHUB_ENV
 
       - name: Fetch Commit Hashes for Sorted PRs
         run: |
