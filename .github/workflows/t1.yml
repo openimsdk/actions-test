@@ -117,4 +117,32 @@ jobs:
 
       - name: Create Pull Request (using script)
         run: |
-          if [ -z "$FILTERED_PR_NUMBERS" ] || [ -z "$FILTERED_
+          if [ -z "$FILTERED_PR_NUMBERS" ] || [ -z "$FILTERED_COMMIT_HASHES" ]; then
+            echo "No PRs to include in the cherry-pick. Skipping pull request creation."
+            exit 0
+          fi
+
+          pr_title="Consolidated PRs for Pre-Release - $TARGET_BRANCH - $(echo $FILTERED_PR_NUMBERS | awk '{printf "#%s ", $1}')"
+          pr_body="This PR includes cherry-picked changes from closed PRs in milestone '${MILESTONE_NAME}'."
+
+          pull_request=$(curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/${{ github.repository }}/pulls \
+            -d "$(jq -n \
+              --arg title "$pr_title" \
+              --arg head "$cherry_pick_branch" \
+              --arg base "$TARGET_BRANCH" \
+              --arg body "$pr_body" \
+              '{title: $title, head: $head, base: $base, body: $body}')")
+
+          new_pr_number=$(echo "$pull_request" | jq -r '.number')
+
+      - name: Label Successfully Cherry-Picked PRs
+        if: ${{ success() }}
+        run: |
+          for pr_number in $FILTERED_PR_NUMBERS; do
+            curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/issues/$pr_number/labels" \
+              -d "$(jq -n --arg label "${LABEL_NAME}" '{labels: [$label]}')"
+          done
