@@ -149,7 +149,7 @@ jobs:
           git remote set-url origin "https://${BOT_TOKEN}@github.com/${{ github.repository }}.git"
           git push origin $CHERRY_PICK_BRANCH
 
-      - name: Create Pull Request
+      - name: Create Pull Request with Label
         run: |
           pr_title="deps: Merge $(cat pr_title.txt | paste -sd " ") PRs into $TARGET_BRANCH"
           pr_body=$(cat pr_body.txt)
@@ -159,6 +159,7 @@ jobs:
           echo "Prepared PR body:"
           echo "$pr_body"
 
+          # Create the Pull Request with the label 'milestone-merge'
           curl -s -X POST -H "Authorization: token $BOT_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             https://api.github.com/repos/${{ github.repository }}/pulls \
@@ -166,14 +167,5 @@ jobs:
               --arg head "$CHERRY_PICK_BRANCH" \
               --arg base "$TARGET_BRANCH" \
               --arg body "$pr_body" \
-              '{title: $title, head: $head, base: $base, body: $body}')"
-
-      # # Step 7: Label PRs as cherry-picked after success
-      # - name: Label Successfully Cherry-Picked PRs
-      #   if: ${{ success() }}
-      #   run: |
-      #     for pr_number in $(cat pr_numbers.txt); do
-      #       curl -s -X POST -H "Authorization: token $BOT_TOKEN" \
-      #         -H "Accept: application/vnd.github+json" \
-      #         "https://api.github.com/repos/${{ github.repository }}/issues/$pr_number/labels" \
-      #         -d "$(jq -n --arg label "${LABEL_NAME}" '{labels: [$label]}')"
+              --argjson labels '["milestone-merge"]' \
+              '{title: $title, head: $head, base: $base, body: $body, labels: $labels}')"
