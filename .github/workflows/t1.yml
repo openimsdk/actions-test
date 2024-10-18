@@ -136,7 +136,7 @@ jobs:
 
           # Configure remote URL with BOT_TOKEN for authentication
           git remote set-url origin "https://${BOT_TOKEN}@github.com/${{ github.repository }}.git"
-          git push origin $CHERRY_PICK_BRANCH
+          git push origin $CHERRY_PICK_BRANCH --force  # Add force push to handle non-fast-forward issue
 
       - name: Create Pull Request
         run: |
