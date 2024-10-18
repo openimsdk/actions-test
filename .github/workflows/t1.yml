@@ -113,7 +113,7 @@ jobs:
 
             # Append PR info to title and body
             echo "#$pr_number" >> pr_titles.txt
-            echo "- PR #$pr_number: $pr_title (Commit: $merge_commit)" >> pr_body.txt
+            echo "- PR #$pr_number: $pr_title (\`$merge_commit\`)" >> pr_body.txt
           done
 
           # Prepare PR title and body from collected data
@@ -121,7 +121,7 @@ jobs:
           pr_body=$(cat pr_body.txt)
 
           echo "PR_TITLE=$pr_numbers_in_title" >> $GITHUB_ENV
-          echo "PR_BODY=$pr_body" >> $GITHUB_ENV
+          echo "PR_BODY=\"$pr_body\"" >> $GITHUB_ENV  # Wrap body in quotes to avoid env format issues
 
           echo "Prepared PR title:"
           echo "$pr_numbers_in_title"
