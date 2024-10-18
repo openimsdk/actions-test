@@ -23,7 +23,6 @@ env:
   MILESTONE_NAME: ${{ github.event.inputs.milestone_name || 'v3.8.2' }}
   TARGET_BRANCH: ${{ github.event.inputs.target_branch || 'pre-release-v3.8.2' }}
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
   LABEL_NAME: cherry-picked
 
 jobs:
@@ -34,9 +33,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.BOT_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Fetch PR Numbers and Commit Hashes
+      - name: Fetch Milestone ID and PR Numbers
         env:
           MILESTONE_NAME: ${{ env.MILESTONE_NAME }}
         run: |
@@ -52,127 +51,77 @@ jobs:
           echo "Milestone ID: $milestone_id"
           echo "MILESTONE_ID=$milestone_id" >> $GITHUB_ENV
 
-          # Fetch closed PRs in the milestone
           issues=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
                 -H "Accept: application/vnd.github+json" \
                 "https://api.github.com/repos/${{ github.repository }}/issues?milestone=$milestone_id&state=closed&per_page=100")
-          
-          filtered_pr_numbers=""
 
-          # Loop through each PR to check if it has the cherry-picked label
-          for pr_number in $(echo "$issues" | jq -r '.[] | select(.pull_request != null) | .number'); do
-            labels=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+          > pr_numbers.txt
+
+          echo "$issues" | jq -r '.[] | select(.pull_request != null and (.labels[]?.name != "cherry-picked")) | .number' >> pr_numbers.txt
+
+          echo "Parsed PR numbers:"
+          cat pr_numbers.txt || echo "No closed PR numbers found for milestone."
+
+      - name: Fetch Merge Commits for PRs
+        run: |
+          > commit_hashes.txt
+
+          for pr_number in $(cat pr_numbers.txt); do
+            echo "Processing PR #$pr_number"
+            merge_commit=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
               -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/repos/${{ github.repository }}/issues/$pr_number/labels" | jq -r '.[].name')
-
-            if ! echo "$labels" | grep -q "${LABEL_NAME}"; then
-              filtered_pr_numbers="$filtered_pr_numbers $pr_number"
-            else
-              echo "PR #$pr_number already has the cherry-picked label. Skipping."
+              "https://api.github.com/repos/${{ github.repository }}/pulls/$pr_number" | jq -r '.merge_commit_sha')
+            if [ "$merge_commit" != "null" ]; then
+              echo "$merge_commit" >> commit_hashes.txt
             fi
           done
 
-          # Sort PR numbers
-          sorted_pr_numbers=$(echo "$filtered_pr_numbers" | tr ' ' '\n' | sort -n)
+          echo "Parsed merge commits:"
+          cat commit_hashes.txt || echo "No merge commits found."
 
-          # Convert sorted PR numbers to a single line string
-          sorted_pr_numbers_single_line=$(echo "$sorted_pr_numbers" | tr '\n' ' ')
-
-          echo "Sorted PR numbers:"
-          echo "$sorted_pr_numbers_single_line"
-
-          # Fetch commit hashes from main branch
-          git fetch origin main
-          git checkout main
-          git pull origin main
-
-          filtered_commit_hashes=""
-          for pr_number in $sorted_pr_numbers; do
-            pr_data=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
-              -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/repos/${{ github.repository }}/pulls/$pr_number/commits")
-
-            first_pr_commit_sha=$(echo "$pr_data" | jq -r '.[0].sha')
-            filtered_commit_hashes="$filtered_commit_hashes $first_pr_commit_sha"
-          done
-
-          echo "Filtered Commit Hashes:"
-          echo "$filtered_commit_hashes"
-
-          echo "FILTERED_COMMIT_HASHES=$filtered_commit_hashes" >> $GITHUB_ENV
-          echo "SORTED_PR_NUMBERS=$sorted_pr_numbers_single_line" >> $GITHUB_ENV
-
-      - name: Perform Cherry-Pick and Push to Remote
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-          FILTERED_COMMIT_HASHES: ${{ env.FILTERED_COMMIT_HASHES }}
-          TARGET_BRANCH: ${{ env.TARGET_BRANCH }}
-        run: |
-          if [ -z "$FILTERED_COMMIT_HASHES" ]; then
-            echo "No commits to cherry-pick. Exiting."
-            exit 0
-          fi
-
-          # Checkout the target branch and create a new branch for cherry-pick
-          git fetch origin $TARGET_BRANCH
-          git checkout -b cherry-pick-temp-branch origin/$TARGET_BRANCH
-
-          first_commit_hash=$(echo "$FILTERED_COMMIT_HASHES" | awk '{print $1}')
+          commit_hashes=$(cat commit_hashes.txt | tr '\n' ' ')
+          first_commit_hash=$(head -n 1 commit_hashes.txt)
           cherry_pick_branch="cherry-pick-${first_commit_hash:0:7}"
-          git checkout -b $cherry_pick_branch
+          echo "COMMIT_HASHES=$commit_hashes" >> $GITHUB_ENV
+          echo "CHERRY_PICK_BRANCH=$cherry_pick_branch" >> $GITHUB_ENV
 
-          # Perform cherry-pick for each commit hash
-          for commit_hash in $FILTERED_COMMIT_HASHES; do
+      - name: Cherry-pick Commits and Push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git fetch origin
+          git checkout -b $TARGET_BRANCH origin/$TARGET_BRANCH
+          git pull origin $TARGET_BRANCH
+
+          git checkout -b $CHERRY_PICK_BRANCH
+
+          for commit_hash in $COMMIT_HASHES; do
             echo "Attempting to cherry-pick commit $commit_hash"
-            if ! git cherry-pick "$commit_hash" --strategy=recursive -X theirs; then
-              if git diff --cached --quiet; then
-                echo "Empty commit, continuing..."
-                git cherry-pick --continue --allow-empty
-              else
-                echo "Conflict resolved with incoming content"
-                git cherry-pick --continue
-              fi
-            fi
+            git cherry-pick "$commit_hash" --strategy=recursive -X theirs || git cherry-pick --continue
           done
 
-          # Push the cherry-pick branch to remote repository
-          git remote set-url origin "https://${BOT_TOKEN}@github.com/openimsdk/actions-test.git"
-          git push origin $cherry_pick_branch
+          # Push the new branch with the cherry-picked changes
+          git remote set-url origin "https://${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
+          git push origin $CHERRY_PICK_BRANCH
 
-      - name: Create Pull Request to Target Branch
-        env:
-          SORTED_PR_NUMBERS: ${{ env.SORTED_PR_NUMBERS }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TARGET_BRANCH: ${{ env.TARGET_BRANCH }}
+      - name: Create Pull Request
         run: |
-          if [ -z "$SORTED_PR_NUMBERS" ]; then
-            echo "No PRs to include in the cherry-pick. Skipping pull request creation."
-            exit 0
-          fi
+          pr_title="Consolidated PRs for Pre-Release - $TARGET_BRANCH"
+          pr_body="This PR includes cherry-picked changes from closed PRs in milestone '${{ env.MILESTONE_NAME }}'."
 
-          pr_title="Consolidated PRs for Pre-Release - $TARGET_BRANCH - $(echo $SORTED_PR_NUMBERS | awk '{printf "#%s ", $1}')"
-          pr_body="This PR includes cherry-picked changes from closed PRs in milestone '${MILESTONE_NAME}'."
-
-          pull_request=$(curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" \
+          curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             https://api.github.com/repos/${{ github.repository }}/pulls \
-            -d "$(jq -n \
-              --arg title "$pr_title" \
-              --arg head "$cherry_pick_branch" \
+            -d "$(jq -n --arg title "$pr_title" \
+              --arg head "$CHERRY_PICK_BRANCH" \
               --arg base "$TARGET_BRANCH" \
               --arg body "$pr_body" \
-              '{title: $title, head: $head, base: $base, body: $body}')")
-
-          new_pr_number=$(echo "$pull_request" | jq -r '.number')
+              '{title: $title, head: $head, base: $base, body: $body}')"
 
       - name: Label Successfully Cherry-Picked PRs
         if: ${{ success() }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SORTED_PR_NUMBERS: ${{ env.SORTED_PR_NUMBERS }}
         run: |
-          for pr_number in $SORTED_PR_NUMBERS; do
+          for pr_number in $(cat pr_numbers.txt); do
             curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" \
               -H "Accept: application/vnd.github+json" \
               "https://api.github.com/repos/${{ github.repository }}/issues/$pr_number/labels" \
