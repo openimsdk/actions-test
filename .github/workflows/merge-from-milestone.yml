@@ -87,22 +87,31 @@ jobs:
           echo "Sorted PR numbers:"
           cat pr_numbers.txt
 
-      - name: Fetch Merge Commits for PRs
+      - name: Fetch Merge Commits for PRs and Generate Title and Body
         run: |
           > commit_hashes.txt
+          > pr_title.txt
+          > pr_body.txt
 
           for pr_number in $(cat pr_numbers.txt); do
             echo "Processing PR #$pr_number"
-            merge_commit=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            pr_details=$(curl -s -H "Authorization: token $BOT_TOKEN" \
               -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/repos/${{ github.repository }}/pulls/$pr_number" | jq -r '.merge_commit_sha')
+              "https://api.github.com/repos/${{ github.repository }}/pulls/$pr_number")
+            pr_title=$(echo "$pr_details" | jq -r '.title')
+            merge_commit=$(echo "$pr_details" | jq -r '.merge_commit_sha')
+            short_commit_hash=$(echo "$merge_commit" | cut -c 1-7)
+
+            commit_url="https://github.com/${{ github.repository }}/commit/$merge_commit"
+            pr_url="https://github.com/${{ github.repository }}/pull/$pr_number"
+
+            echo "#$pr_number" >> pr_title.txt
+            echo "* **$pr_title**: ([#$pr_number]($pr_url)) ([\`$short_commit_hash\`]($commit_url))" >> pr_body.txt
+
             if [ "$merge_commit" != "null" ]; then
               echo "$merge_commit" >> commit_hashes.txt
             fi
           done
-
-          echo "Parsed merge commits:"
-          cat commit_hashes.txt || echo "No merge commits found."
 
           commit_hashes=$(cat commit_hashes.txt | tr '\n' ' ')
           first_commit_hash=$(head -n 1 commit_hashes.txt)
@@ -115,15 +124,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         run: |
-          # Fetch and pull the latest changes from the target branch
           git fetch origin
           git checkout $TARGET_BRANCH
           git pull origin $TARGET_BRANCH
 
-          # Create a new branch for cherry-picking
           git checkout -b $CHERRY_PICK_BRANCH
 
-          # Cherry-pick the commits
           for commit_hash in $COMMIT_HASHES; do
             echo "Attempting to cherry-pick commit $commit_hash"
             if ! git cherry-pick "$commit_hash" --strategy=recursive -X theirs; then
@@ -137,9 +143,7 @@ jobs:
             fi
           done
 
-          # Configure remote URL with BOT_TOKEN for authentication
           git remote set-url origin "https://${BOT_TOKEN}@github.com/${{ github.repository }}.git"
-          # Push the cherry-pick branch
           git push origin $CHERRY_PICK_BRANCH
 
       - name: Create Pull Request
@@ -152,7 +156,6 @@ jobs:
           echo "Prepared PR body:"
           echo "$pr_body"
 
-          # Create the Pull Request using curl
           curl -s -X POST -H "Authorization: token $BOT_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             https://api.github.com/repos/${{ github.repository }}/pulls \
@@ -171,4 +174,3 @@ jobs:
       #         -H "Accept: application/vnd.github+json" \
       #         "https://api.github.com/repos/${{ github.repository }}/issues/$pr_number/labels" \
       #         -d "$(jq -n --arg label "${LABEL_NAME}" '{labels: [$label]}')"
-      #     done
