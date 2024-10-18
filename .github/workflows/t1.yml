@@ -36,7 +36,7 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.BOT_TOKEN }}
 
-      - name: Fetch Milestone ID and Filter Closed PRs Without Label
+      - name: Fetch PR Numbers, Commit Hashes and Perform Cherry-Pick
         env:
           MILESTONE_NAME: ${{ env.MILESTONE_NAME }}
         run: |
@@ -57,9 +57,8 @@ jobs:
                 -H "Accept: application/vnd.github+json" \
                 "https://api.github.com/repos/${{ github.repository }}/issues?milestone=$milestone_id&state=closed&per_page=100")
           
-          # Initialize PR number array
           filtered_pr_numbers=""
-          
+
           # Loop through each PR to check if it has the cherry-picked label
           for pr_number in $(echo "$issues" | jq -r '.[] | select(.pull_request != null) | .number'); do
             labels=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
@@ -82,16 +81,10 @@ jobs:
           echo "Sorted PR numbers:"
           echo "$sorted_pr_numbers_single_line"
 
-          echo "SORTED_PR_NUMBERS=$sorted_pr_numbers_single_line" >> $GITHUB_ENV
-
-      - name: Fetch Commit Hashes for Sorted PRs from Main Branch
-        run: |
-          # Ensure we are on the main branch to fetch commit hashes
+          # Fetch commit hashes from main branch
           git fetch origin main
           git checkout main
           git pull origin main
-
-          sorted_pr_numbers=$(echo $SORTED_PR_NUMBERS)
 
           filtered_commit_hashes=""
           for pr_number in $sorted_pr_numbers; do
@@ -106,27 +99,16 @@ jobs:
           echo "Filtered Commit Hashes:"
           echo "$filtered_commit_hashes"
 
-          echo "FILTERED_COMMIT_HASHES=$filtered_commit_hashes" >> $GITHUB_ENV
-
-      - name: Create Cherry-Pick Branch from Target and Apply Commits
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-        run: |
-          if [ -z "$FILTERED_COMMIT_HASHES" ]; then
-            echo "No commits to cherry-pick. Exiting."
-            exit 0
-          fi
-
-          # Fetch and checkout the target branch (base branch for PR)
+          # Checkout target branch and create cherry-pick branch
           git fetch origin $TARGET_BRANCH
           git checkout -b cherry-pick-temp-branch origin/$TARGET_BRANCH
 
-          first_commit_hash=$(echo "$FILTERED_COMMIT_HASHES" | awk '{print $1}')
+          first_commit_hash=$(echo "$filtered_commit_hashes" | awk '{print $1}')
           cherry_pick_branch="cherry-pick-${first_commit_hash:0:7}"
           git checkout -b $cherry_pick_branch
 
-          for commit_hash in $FILTERED_COMMIT_HASHES; do
+          # Perform cherry-pick for each commit hash
+          for commit_hash in $filtered_commit_hashes; do
             echo "Attempting to cherry-pick commit $commit_hash"
             if ! git cherry-pick "$commit_hash" --strategy=recursive -X theirs; then
               if git diff --cached --quiet; then
@@ -139,18 +121,18 @@ jobs:
             fi
           done
 
-          # Push cherry-pick branch to remote repository
+          # Push the cherry-pick branch to remote repository
           git remote set-url origin "https://${BOT_TOKEN}@github.com/openimsdk/actions-test.git"
           git push origin $cherry_pick_branch
 
       - name: Create Pull Request to Target Branch
         run: |
-          if [ -z "$SORTED_PR_NUMBERS" ]; then
+          if [ -z "$sorted_pr_numbers_single_line" ]; then
             echo "No PRs to include in the cherry-pick. Skipping pull request creation."
             exit 0
           fi
 
-          pr_title="Consolidated PRs for Pre-Release - $TARGET_BRANCH - $(echo $SORTED_PR_NUMBERS | awk '{printf "#%s ", $1}')"
+          pr_title="Consolidated PRs for Pre-Release - $TARGET_BRANCH - $(echo $sorted_pr_numbers_single_line | awk '{printf "#%s ", $1}')"
           pr_body="This PR includes cherry-picked changes from closed PRs in milestone '${MILESTONE_NAME}'."
 
           pull_request=$(curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" \
@@ -168,7 +150,7 @@ jobs:
       - name: Label Successfully Cherry-Picked PRs
         if: ${{ success() }}
         run: |
-          for pr_number in $SORTED_PR_NUMBERS; do
+          for pr_number in $sorted_pr_numbers_single_line; do
             curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" \
               -H "Accept: application/vnd.github+json" \
               "https://api.github.com/repos/${{ github.repository }}/issues/$pr_number/labels" \
