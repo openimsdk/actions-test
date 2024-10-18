@@ -95,9 +95,11 @@ jobs:
 
           # Add header to pr_body.txt
           echo "## Description:" >> pr_body.txt
-          echo "$PR_title" >> pr_body.txt
+          echo "Consolidating PRs from milestone into target branch $TARGET_BRANCH." >> pr_body.txt
           echo "" >> pr_body.txt
           echo "### Merged PRs:" >> pr_body.txt
+
+          pr_numbers_in_title=""  # Variable to store PR numbers for the title
 
           for pr_number in $(cat pr_numbers.txt); do
             echo "Processing PR #$pr_number"
@@ -113,6 +115,9 @@ jobs:
 
             if [ "$merge_commit" != "null" ]; then
               echo "$merge_commit" >> commit_hashes.txt
+              # Append PR number to pr_title.txt and pr_numbers_in_title
+              echo "#$pr_number" >> pr_title.txt
+              pr_numbers_in_title="$pr_numbers_in_title #$pr_number"
             fi
           done
 
@@ -121,6 +126,7 @@ jobs:
           cherry_pick_branch="cherry-pick-${first_commit_hash:0:7}"
           echo "COMMIT_HASHES=$commit_hashes" >> $GITHUB_ENV
           echo "CHERRY_PICK_BRANCH=$cherry_pick_branch" >> $GITHUB_ENV
+          echo "pr_numbers_in_title=$pr_numbers_in_title" >> $GITHUB_ENV
 
       - name: Pull and Cherry-pick Commits, Then Push
         env:
@@ -151,7 +157,7 @@ jobs:
 
       - name: Create Pull Request with Label
         run: |
-          pr_title="deps: Merge $(cat pr_title.txt | paste -sd " ") PRs into $TARGET_BRANCH"
+          pr_title="deps: Merge ${{ env.pr_numbers_in_title }} PRs into $TARGET_BRANCH"
           pr_body=$(cat pr_body.txt)
 
           echo "Prepared PR title:"
