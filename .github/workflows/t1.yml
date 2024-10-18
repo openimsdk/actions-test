@@ -106,6 +106,12 @@ jobs:
             pr_title=$(echo "$pr_details" | jq -r '.title')
             merge_commit=$(echo "$pr_details" | jq -r '.merge_commit_sha')
 
+            # Shorten the commit hash
+            short_commit_hash=$(echo "$merge_commit" | cut -c 1-7)
+
+            # Construct the commit URL
+            commit_url="https://github.com/${{ github.repository }}/commit/$merge_commit"
+
             # Add commit hash to commit_hashes.txt if not null
             if [ "$merge_commit" != "null" ]; then
               echo "$merge_commit" >> commit_hashes.txt
@@ -113,20 +119,16 @@ jobs:
 
             # Append PR info to title and body
             echo "#$pr_number" >> pr_titles.txt
-            echo "- PR #$pr_number: $pr_title (\`$merge_commit\`)" >> pr_body.txt
+            echo "- PR #$pr_number: $pr_title ([\`$short_commit_hash\`]($commit_url))" >> pr_body.txt
           done
 
           # Prepare PR title and body from collected data
           pr_numbers_in_title=$(paste -sd " " pr_titles.txt)
-          pr_body=$(cat pr_body.txt)
-
-          echo "PR_TITLE=$pr_numbers_in_title" >> $GITHUB_ENV
-          echo "PR_BODY=\"$pr_body\"" >> $GITHUB_ENV  # Wrap body in quotes to avoid env format issues
 
           echo "Prepared PR title:"
           echo "$pr_numbers_in_title"
           echo "Prepared PR body:"
-          echo "$pr_body"
+          cat pr_body.txt
 
           # Collect commit hashes
           commit_hashes=$(cat commit_hashes.txt | tr '\n' ' ')
@@ -170,16 +172,17 @@ jobs:
       - name: Create Pull Request
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-          PR_TITLE: ${{ env.PR_TITLE }}
-          PR_BODY: ${{ env.PR_BODY }}
         run: |
+          pr_title=$(paste -sd " " pr_titles.txt)
+          pr_body=$(cat pr_body.txt)
+
           curl -s -X POST -H "Authorization: token $BOT_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             https://api.github.com/repos/${{ github.repository }}/pulls \
-            -d "$(jq -n --arg title "Consolidated PRs: $PR_TITLE" \
+            -d "$(jq -n --arg title "Consolidated PRs: $pr_title" \
               --arg head "$CHERRY_PICK_BRANCH" \
               --arg base "$TARGET_BRANCH" \
-              --arg body "$PR_BODY" \
+              --arg body "$pr_body" \
               '{title: $title, head: $head, base: $base, body: $body}')"
 
       - name: Label Successfully Cherry-Picked PRs
