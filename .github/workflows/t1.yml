@@ -110,17 +110,20 @@ jobs:
           echo "COMMIT_HASHES=$commit_hashes" >> $GITHUB_ENV
           echo "CHERRY_PICK_BRANCH=$cherry_pick_branch" >> $GITHUB_ENV
 
-      - name: Cherry-pick Commits and Push
+      - name: Pull and Cherry-pick Commits, Then Push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         run: |
+          # Fetch and pull the latest changes from the target branch
           git fetch origin
-          git checkout -b $TARGET_BRANCH origin/$TARGET_BRANCH
+          git checkout $TARGET_BRANCH
           git pull origin $TARGET_BRANCH
 
+          # Create a new branch for cherry-picking
           git checkout -b $CHERRY_PICK_BRANCH
 
+          # Cherry-pick the commits
           for commit_hash in $COMMIT_HASHES; do
             echo "Attempting to cherry-pick commit $commit_hash"
             if ! git cherry-pick "$commit_hash" --strategy=recursive -X theirs; then
@@ -136,7 +139,8 @@ jobs:
 
           # Configure remote URL with BOT_TOKEN for authentication
           git remote set-url origin "https://${BOT_TOKEN}@github.com/${{ github.repository }}.git"
-          git push origin $CHERRY_PICK_BRANCH --force  # Add force push to handle non-fast-forward issue
+          # Push the cherry-pick branch
+          git push origin $CHERRY_PICK_BRANCH --force
 
       - name: Create Pull Request
         run: |
