@@ -52,14 +52,29 @@ jobs:
           echo "Milestone ID: $milestone_id"
           echo "MILESTONE_ID=$milestone_id" >> $GITHUB_ENV
 
-          # Fetch closed PRs in the milestone without the cherry-picked label
+          # Fetch closed PRs in the milestone
           issues=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
                 -H "Accept: application/vnd.github+json" \
                 "https://api.github.com/repos/${{ github.repository }}/issues?milestone=$milestone_id&state=closed&per_page=100")
-          pr_numbers=$(echo "$issues" | jq -r '.[] | select(.pull_request != null and (.labels[]?.name != "cherry-picked")) | .number')
+          
+          # Initialize PR number array
+          filtered_pr_numbers=""
+          
+          # Loop through each PR to check if it has the cherry-picked label
+          for pr_number in $(echo "$issues" | jq -r '.[] | select(.pull_request != null) | .number'); do
+            labels=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/issues/$pr_number/labels" | jq -r '.[].name')
+
+            if ! echo "$labels" | grep -q "${LABEL_NAME}"; then
+              filtered_pr_numbers="$filtered_pr_numbers $pr_number"
+            else
+              echo "PR #$pr_number already has the cherry-picked label. Skipping."
+            fi
+          done
 
           # Sort PR numbers
-          sorted_pr_numbers=$(echo "$pr_numbers" | sort -n)
+          sorted_pr_numbers=$(echo "$filtered_pr_numbers" | tr ' ' '\n' | sort -n)
 
           # Convert sorted PR numbers to a single line string
           sorted_pr_numbers_single_line=$(echo "$sorted_pr_numbers" | tr '\n' ' ')
