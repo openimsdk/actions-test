@@ -1,0 +1,41 @@
+name: Cleanup After Merge
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  delete_temp_branch_and_label_prs:
+    if: |
+      github.event.pull_request.merged == true &&
+      contains(github.event.pull_request.title, 'deps: Merge') &&
+      contains(github.event.pull_request.labels.*.name, 'milestone-merge')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.BOT_TOKEN }}
+
+      - name: Delete Temporary Branch
+        env:
+          CHERRY_PICK_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          git push origin --delete $CHERRY_PICK_BRANCH
+          echo "Deleted temporary branch $CHERRY_PICK_BRANCH."
+
+      - name: Label Successfully Cherry-Picked PRs
+        run: |
+          pr_numbers=$(jq -r '.pull_request.body | scan("#([0-9]+)")' <<< "${{ github.event }}")
+          for pr_number in $pr_numbers; do
+            curl -s -X POST -H "Authorization: token $BOT_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/issues/$pr_number/labels" \
+              -d "$(jq -n --arg label "cherry-picked" '{labels: [$label]}')"
+          done
