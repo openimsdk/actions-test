@@ -149,16 +149,26 @@ jobs:
           # Push the new branch with cherry-picked commits
           git push origin $CHERRY_PICK_BRANCH
 
-      # Step 6: Create the Pull Request using peter-evans/create-pull-request action
-      - name: Create Pull Request using Action
-        uses: peter-evans/create-pull-request@v7.0.5
-        with:
-          token: ${{ secrets.BOT_TOKEN }}
-          branch: ${{ env.CHERRY_PICK_BRANCH }}
-          base: $TARGET_BRANCH
-          title: "deps: Merge $(cat pr_title.txt | paste -sd " ") PRs into $TARGET_BRANCH"
-          body: |
-            $(cat pr_body.txt)
+      # Step 6: Use curl to create the Pull Request
+      - name: Create Pull Request using curl
+        run: |
+          pr_title="deps: Merge $(cat pr_title.txt | paste -sd " ") PRs into $TARGET_BRANCH"
+          pr_body=$(cat pr_body.txt)
+
+          echo "Prepared PR title:"
+          echo "$pr_title"
+          echo "Prepared PR body:"
+          echo "$pr_body"
+
+          # Create the Pull Request using curl
+          curl -s -X POST -H "Authorization: token $BOT_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/${{ github.repository }}/pulls \
+            -d "$(jq -n --arg title "$pr_title" \
+              --arg head "$CHERRY_PICK_BRANCH" \
+              --arg base "$TARGET_BRANCH" \
+              --arg body "$pr_body" \
+              '{title: $title, head: $head, base: $base, body: $body}')"
 
       # Step 7: Label PRs as cherry-picked after success
       - name: Label Successfully Cherry-Picked PRs
