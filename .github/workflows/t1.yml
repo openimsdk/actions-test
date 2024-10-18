@@ -1,4 +1,4 @@
-name: Create Pre-Release PR from Milestone
+name: Merge PRs from Milestone
 
 permissions:
   contents: write
@@ -30,126 +30,96 @@ jobs:
   cherry_pick_milestone_prs:
     runs-on: ubuntu-latest
     steps:
+      # Step 1: Checkout repository with full history
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ secrets.BOT_TOKEN }}
 
+      # Step 2: Setup Git user configuration for the bot
       - name: Setup Git User for OpenIM-Robot
         run: |
           git config --global user.email "OpenIM-Robot@users.noreply.github.com"
           git config --global user.name "OpenIM-Robot"
 
-      - name: Fetch Milestone ID and Filter PR Numbers (Using For Loop)
+      # Step 3: Fetch Milestone ID and filter PR numbers without the 'cherry-picked' label
+      - name: Fetch Milestone ID and Filter PR Numbers
         env:
           MILESTONE_NAME: ${{ env.MILESTONE_NAME }}
         run: |
-          # Fetch milestones
+          # Fetch all milestones and find the one with the specified name
           milestones=$(curl -s -H "Authorization: token $BOT_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/${{ github.repository }}/milestones")
           milestone_id=$(echo "$milestones" | grep -B3 "\"title\": \"$MILESTONE_NAME\"" | grep '"number":' | head -n1 | grep -o '[0-9]\+')
-          if [ -z "$milestone_id" ]; then
-            echo "Milestone '$MILESTONE_NAME' not found. Exiting."
-            exit 1
-          fi
           echo "Milestone ID: $milestone_id"
-          echo "MILESTONE_ID=$milestone_id" >> $GITHUB_ENV
 
-          # Fetch all issues for the milestone
+          # Fetch all issues for the milestone and filter out PRs without the 'cherry-picked' label
           issues=$(curl -s -H "Authorization: token $BOT_TOKEN" \
                 -H "Accept: application/vnd.github+json" \
                 "https://api.github.com/repos/${{ github.repository }}/issues?milestone=$milestone_id&state=closed&per_page=100")
 
           > pr_numbers.txt
 
-          # Use for loop to filter PRs that do not have the 'cherry-picked' label
           for pr_number in $(echo "$issues" | jq -r '.[] | select(.pull_request != null) | .number'); do
             labels=$(curl -s -H "Authorization: token $BOT_TOKEN" \
               -H "Accept: application/vnd.github+json" \
               "https://api.github.com/repos/${{ github.repository }}/issues/$pr_number/labels" | jq -r '.[].name')
 
+            # Only include PRs that do not have the 'cherry-picked' label
             if ! echo "$labels" | grep -q "${LABEL_NAME}"; then
-              echo "PR #$pr_number does not have the 'cherry-picked' label. Adding to the list."
               echo "$pr_number" >> pr_numbers.txt
-            else
-              echo "PR #$pr_number already has the 'cherry-picked' label. Skipping."
             fi
           done
 
           echo "Filtered PR numbers:"
-          cat pr_numbers.txt || echo "No closed PR numbers found for milestone."
+          cat pr_numbers.txt
 
-          # Sort PR numbers
+          # Sort PR numbers in ascending order
           sort -n pr_numbers.txt -o pr_numbers.txt
 
           echo "Sorted PR numbers:"
           cat pr_numbers.txt
 
+      # Step 4: Fetch merge commit SHA for each filtered PR and prepare PR title and body
       - name: Fetch Merge Commits for PRs and Prepare PR Title and Body
         run: |
           > commit_hashes.txt
-          > pr_titles.txt
+          > pr_title.txt
           > pr_body.txt
 
-          # Collect PR details and format for title and body
+          # Collect PR details and format the title and body for the new PR
           for pr_number in $(cat pr_numbers.txt); do
-            echo "Processing PR #$pr_number"
-
-            # Fetch PR details
             pr_details=$(curl -s -H "Authorization: token $BOT_TOKEN" \
               -H "Accept: application/vnd.github+json" \
               "https://api.github.com/repos/${{ github.repository }}/pulls/$pr_number")
             
-            # Get the title of the PR
             pr_title=$(echo "$pr_details" | jq -r '.title')
             merge_commit=$(echo "$pr_details" | jq -r '.merge_commit_sha')
-
-            # Shorten the commit hash
             short_commit_hash=$(echo "$merge_commit" | cut -c 1-7)
 
-            # Construct the commit URL
             commit_url="https://github.com/${{ github.repository }}/commit/$merge_commit"
             pr_url="https://github.com/${{ github.repository }}/pull/$pr_number"
-            
-            # Fetch associated issue (if any)
-            associated_issues=$(echo "$pr_details" | jq -r '.body' | grep -o '#[0-9]\+' | head -n 1)
-            issue_url="https://github.com/${{ github.repository }}/issues/${associated_issues#\#}"
 
-            # Add commit hash to commit_hashes.txt if not null
-            if [ "$merge_commit" != "null" ]; then
-              echo "$merge_commit" >> commit_hashes.txt
-            fi
+            # Prepare PR title
+            echo "#$pr_number" >> pr_title.txt
 
-            # Append PR info to title and body in required format
-            if [ -n "$associated_issues" ]; then
-              echo "* **$pr_title**: ([#$pr_number]($pr_url)) ([\`$short_commit_hash\`]($commit_url)), closes [#$associated_issues]($issue_url)" >> pr_body.txt
-            else
-              echo "* **$pr_title**: ([#$pr_number]($pr_url)) ([\`$short_commit_hash\`]($commit_url))" >> pr_body.txt
-            fi
-
-            # Append PR number for use in title
-            echo "#$pr_number" >> pr_titles.txt
+            # Prepare PR body
+            echo "* **$pr_title**: ([#$pr_number]($pr_url)) ([\`$short_commit_hash\`]($commit_url))" >> pr_body.txt
           done
 
-          # Prepare PR title and body from collected data
-          pr_numbers_in_title=$(paste -sd " " pr_titles.txt)
-
-          echo "Prepared PR title:"
-          echo "$pr_numbers_in_title"
-          echo "$pr_numbers_in_title" > pr_title.txt  # Save title to file
-          echo "Prepared PR body:"
-          cat pr_body.txt
-
-          # Collect commit hashes
+          # Collect commit hashes and prepare the branch name for cherry-picking
+          pr_numbers_in_title=$(paste -sd " " pr_title.txt)
           commit_hashes=$(cat commit_hashes.txt | tr '\n' ' ')
           first_commit_hash=$(head -n 1 commit_hashes.txt)
           cherry_pick_branch="cherry-pick-${first_commit_hash:0:7}"
+
           echo "COMMIT_HASHES=$commit_hashes" >> $GITHUB_ENV
           echo "CHERRY_PICK_BRANCH=$cherry_pick_branch" >> $GITHUB_ENV
 
-      - name: Pull and Cherry-pick Commits
+      # Step 5: Cherry-pick commits and push to remote
+      - name: Cherry-pick Commits and Push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
@@ -162,7 +132,7 @@ jobs:
           # Create a new branch for cherry-picking
           git checkout -b $CHERRY_PICK_BRANCH
 
-          # Cherry-pick the commits
+          # Cherry-pick the commits and resolve conflicts by taking the incoming changes
           for commit_hash in $COMMIT_HASHES; do
             echo "Attempting to cherry-pick commit $commit_hash"
             if ! git cherry-pick "$commit_hash" --strategy=recursive -X theirs; then
@@ -176,16 +146,21 @@ jobs:
             fi
           done
 
+          # Push the new branch with cherry-picked commits
+          git push origin $CHERRY_PICK_BRANCH
+
+      # Step 6: Create the Pull Request using peter-evans/create-pull-request action
       - name: Create Pull Request using Action
         uses: peter-evans/create-pull-request@v7.0.5
         with:
           token: ${{ secrets.BOT_TOKEN }}
           branch: ${{ env.CHERRY_PICK_BRANCH }}
           base: $TARGET_BRANCH
-          title: "$(cat pr_title.txt)"
+          title: "deps: Merge $(cat pr_title.txt | paste -sd " ") PRs into $TARGET_BRANCH"
           body: |
             $(cat pr_body.txt)
 
+      # Step 7: Label PRs as cherry-picked after success
       - name: Label Successfully Cherry-Picked PRs
         if: ${{ success() }}
         run: |
