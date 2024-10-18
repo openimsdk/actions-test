@@ -138,7 +138,7 @@ jobs:
 
           echo "Prepared PR title:"
           echo "$pr_numbers_in_title"
-          echo "$pr_numbers_in_title" >> $GITHUB_ENV  # Save the title as environment variable
+          echo "$pr_numbers_in_title" > pr_title.txt  # Save title to file
           echo "Prepared PR body:"
           cat pr_body.txt
 
@@ -182,7 +182,7 @@ jobs:
           token: ${{ secrets.BOT_TOKEN }}
           branch: ${{ env.CHERRY_PICK_BRANCH }}
           base: $TARGET_BRANCH
-          title: "deps: Merge ${{ env.pr_numbers_in_title }} PRs into ${{ env.TARGET_BRANCH }}"
+          title: "$(cat pr_title.txt)"
           body: |
             $(cat pr_body.txt)
 
