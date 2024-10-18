@@ -84,8 +84,13 @@ jobs:
 
           echo "SORTED_PR_NUMBERS=$sorted_pr_numbers_single_line" >> $GITHUB_ENV
 
-      - name: Fetch Commit Hashes for Sorted PRs
+      - name: Fetch Commit Hashes for Sorted PRs from Main Branch
         run: |
+          # Ensure we are on the main branch to fetch commit hashes
+          git fetch origin main
+          git checkout main
+          git pull origin main
+
           sorted_pr_numbers=$(echo $SORTED_PR_NUMBERS)
 
           filtered_commit_hashes=""
@@ -103,7 +108,7 @@ jobs:
 
           echo "FILTERED_COMMIT_HASHES=$filtered_commit_hashes" >> $GITHUB_ENV
 
-      - name: Cherry-pick Commits to New Branch and Push
+      - name: Create Cherry-Pick Branch from Target and Apply Commits
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
@@ -113,9 +118,9 @@ jobs:
             exit 0
           fi
 
-          git fetch origin
-          git checkout $TARGET_BRANCH
-          git pull origin $TARGET_BRANCH
+          # Fetch and checkout the target branch (base branch for PR)
+          git fetch origin $TARGET_BRANCH
+          git checkout -b cherry-pick-temp-branch origin/$TARGET_BRANCH
 
           first_commit_hash=$(echo "$FILTERED_COMMIT_HASHES" | awk '{print $1}')
           cherry_pick_branch="cherry-pick-${first_commit_hash:0:7}"
@@ -134,10 +139,11 @@ jobs:
             fi
           done
 
+          # Push cherry-pick branch to remote repository
           git remote set-url origin "https://${BOT_TOKEN}@github.com/openimsdk/actions-test.git"
           git push origin $cherry_pick_branch
 
-      - name: Create Pull Request (using script)
+      - name: Create Pull Request to Target Branch
         run: |
           if [ -z "$SORTED_PR_NUMBERS" ]; then
             echo "No PRs to include in the cherry-pick. Skipping pull request creation."
