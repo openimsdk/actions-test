@@ -46,7 +46,6 @@ jobs:
         env:
           MILESTONE_NAME: ${{ env.MILESTONE_NAME }}
         run: |
-          # Fetch milestones
           milestones=$(curl -s -H "Authorization: token $BOT_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/${{ github.repository }}/milestones")
@@ -58,14 +57,12 @@ jobs:
           echo "Milestone ID: $milestone_id"
           echo "MILESTONE_ID=$milestone_id" >> $GITHUB_ENV
 
-          # Fetch all issues for the milestone
           issues=$(curl -s -H "Authorization: token $BOT_TOKEN" \
                 -H "Accept: application/vnd.github+json" \
                 "https://api.github.com/repos/${{ github.repository }}/issues?milestone=$milestone_id&state=closed&per_page=100")
 
           > pr_numbers.txt
 
-          # Use for loop to filter PRs that do not have the 'cherry-picked' label
           for pr_number in $(echo "$issues" | jq -r '.[] | select(.pull_request != null) | .number'); do
             labels=$(curl -s -H "Authorization: token $BOT_TOKEN" \
               -H "Accept: application/vnd.github+json" \
@@ -82,38 +79,36 @@ jobs:
           echo "Filtered PR numbers:"
           cat pr_numbers.txt || echo "No closed PR numbers found for milestone."
 
-          # Sort PR numbers
           sort -n pr_numbers.txt -o pr_numbers.txt
 
-          echo "Sorted PR numbers:"
-          cat pr_numbers.txt
-
-      - name: Apply Patches and Cherry-pick Commits
+      - name: Pull and Cherry-pick Commits with Conflict Resolution
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         run: |
-          # Fetch and pull the latest changes from the target branch
           git fetch origin
           git checkout $TARGET_BRANCH
           git pull origin $TARGET_BRANCH
-
-          # Create a new branch for cherry-picking
           git checkout -b $CHERRY_PICK_BRANCH
 
-          # Generate patches for each commit and apply them
-          for pr_number in $(cat pr_numbers.txt); do
-            echo "Generating patch for PR #$pr_number"
-            git format-patch -1 --stdout "$pr_number" > /tmp/$pr_number.patch
+          for commit_hash in $COMMIT_HASHES; do
+            echo "Attempting to cherry-pick commit $commit_hash"
+            if ! git cherry-pick "$commit_hash" --strategy=recursive -X theirs; then
+              # Handle conflict: resolve deletions or modifications
+              if git status | grep -q "both deleted:"; then
+                echo "Resolving deletion conflict"
+                git rm $(git status | grep "both deleted:" | awk '{print $3}')
+              fi
 
-            echo "Applying patch for PR #$pr_number"
-            if ! git am < /tmp/$pr_number.patch; then
-              echo "Resolving conflicts with incoming changes"
-              git am --skip  # Skip the current patch if it fails
+              if git status | grep -q "Unmerged paths:"; then
+                echo "Resolving remaining conflicts with incoming changes"
+                git add .
+              fi
+
+              git cherry-pick --continue || echo "Skipping commit $commit_hash due to unresolved issues"
             fi
           done
 
-          # Configure remote URL with BOT_TOKEN for authentication
           git remote set-url origin "https://${BOT_TOKEN}@github.com/${{ github.repository }}.git"
           git push origin $CHERRY_PICK_BRANCH --force
 
@@ -127,7 +122,6 @@ jobs:
           echo "Prepared PR body:"
           echo "$pr_body"
 
-          # Create the Pull Request (without the label for now)
           response=$(curl -s -X POST -H "Authorization: token $BOT_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             https://api.github.com/repos/${{ github.repository }}/pulls \
@@ -137,9 +131,7 @@ jobs:
               --arg body "$pr_body" \
               '{title: $title, head: $head, base: $base, body: $body}')")
 
-          # Extract the PR number from the response
           pr_number=$(echo "$response" | jq -r '.number')
-
           echo "Created PR #$pr_number"
 
       - name: Add Label to Created Pull Request
