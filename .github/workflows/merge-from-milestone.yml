@@ -133,7 +133,7 @@ jobs:
           echo "CHERRY_PICK_BRANCH=$cherry_pick_branch" >> $GITHUB_ENV
           echo "pr_numbers_in_title=$pr_numbers_in_title" >> $GITHUB_ENV
 
-      # Step 5: Pull and Cherry-pick Commits, Then Push
+      # Step 5: Pull and Cherry-pick Commits, Then Push (Handle Only Modified Files)
       - name: Pull and Cherry-pick Commits, Then Push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -150,20 +150,31 @@ jobs:
           # Cherry-pick the commits
           for commit_hash in $COMMIT_HASHES; do
             echo "Attempting to cherry-pick commit $commit_hash"
-            
+
             if ! git cherry-pick "$commit_hash" --strategy=recursive -X theirs; then
               echo "Conflict detected during cherry-pick for $commit_hash."
 
-              # Resolve conflict by accepting incoming changes
-              git add -A  # Add all changes including unmerged files
-              
+              # Resolve conflict by adding only modified and deleted files
+              modified_files=$(git diff --name-only --diff-filter=AM)  # Track added and modified files
+              deleted_files=$(git diff --name-only --diff-filter=D)   # Track deleted files
+
+              if [ -n "$modified_files" ]; then
+                echo "Staging modified files: $modified_files"
+                git add $modified_files
+              fi
+
+              if [ -n "$deleted_files" ]; then
+                echo "Staging deleted files: $deleted_files"
+                git rm $deleted_files
+              fi
+
               # Continue cherry-pick after resolving conflict
               git cherry-pick --continue || git cherry-pick --skip
               echo "Conflicts resolved. Continuing with cherry-pick."
             else
               echo "Cherry-pick successful for commit $commit_hash."
             fi
-            
+
             # Add a small delay to avoid issues
             sleep 2
           done
@@ -195,6 +206,7 @@ jobs:
 
           # Extract the PR number from the response
           pr_number=$(echo "$response" | jq -r '.number')
+
           echo "Created PR #$pr_number"
 
       # Step 7: Add Label to Created Pull Request
