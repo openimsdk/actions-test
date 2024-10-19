@@ -46,7 +46,7 @@ jobs:
         env:
           MILESTONE_NAME: ${{ env.MILESTONE_NAME }}
         run: |
-          # Fetch milestones
+          echo "Fetching milestone ID and filtering PR numbers..."
           milestones=$(curl -s -H "Authorization: token $BOT_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/${{ github.repository }}/milestones")
@@ -58,14 +58,13 @@ jobs:
           echo "Milestone ID: $milestone_id"
           echo "MILESTONE_ID=$milestone_id" >> $GITHUB_ENV
 
-          # Fetch all issues for the milestone
+          echo "Fetching all issues for milestone..."
           issues=$(curl -s -H "Authorization: token $BOT_TOKEN" \
                 -H "Accept: application/vnd.github+json" \
                 "https://api.github.com/repos/${{ github.repository }}/issues?milestone=$milestone_id&state=closed&per_page=100")
 
           > pr_numbers.txt
 
-          # Use for loop to filter PRs that do not have the 'cherry-picked' label
           for pr_number in $(echo "$issues" | jq -r '.[] | select(.pull_request != null) | .number'); do
             labels=$(curl -s -H "Authorization: token $BOT_TOKEN" \
               -H "Accept: application/vnd.github+json" \
@@ -82,9 +81,7 @@ jobs:
           echo "Filtered PR numbers:"
           cat pr_numbers.txt || echo "No closed PR numbers found for milestone."
 
-          # Sort PR numbers
           sort -n pr_numbers.txt -o pr_numbers.txt
-
           echo "Sorted PR numbers:"
           cat pr_numbers.txt
 
@@ -94,13 +91,12 @@ jobs:
           > pr_title.txt
           > pr_body.txt
 
-          # Add Description to pr_body.txt
           echo "### Description:" >> pr_body.txt
           echo "Merging PRs from milestone \`$MILESTONE_NAME\` into target branch \`$TARGET_BRANCH\`." >> pr_body.txt
           echo "" >> pr_body.txt
           echo "### Need Merge PRs:" >> pr_body.txt
 
-          pr_numbers_in_title=""  # Variable to store PR numbers for the title
+          pr_numbers_in_title=""
 
           for pr_number in $(cat pr_numbers.txt); do
             echo "Processing PR #$pr_number"
@@ -111,12 +107,11 @@ jobs:
             merge_commit=$(echo "$pr_details" | jq -r '.merge_commit_sha')
             short_commit_hash=$(echo "$merge_commit" | cut -c 1-7)
 
-            # Writing the formatted PR information into pr_body.txt
             echo "- $pr_title: (#$pr_number) ($short_commit_hash)" >> pr_body.txt
+            echo "Added PR #$pr_number to the body."
 
-            if [ "$merge_commit" != "null" ];then
+            if [ "$merge_commit" != "null" ]; then
               echo "$merge_commit" >> commit_hashes.txt
-              # Append PR number to pr_title.txt and pr_numbers_in_title
               echo "#$pr_number" >> pr_title.txt
               pr_numbers_in_title="$pr_numbers_in_title #$pr_number"
             fi
@@ -128,60 +123,66 @@ jobs:
           echo "COMMIT_HASHES=$commit_hashes" >> $GITHUB_ENV
           echo "CHERRY_PICK_BRANCH=$cherry_pick_branch" >> $GITHUB_ENV
           echo "pr_numbers_in_title=$pr_numbers_in_title" >> $GITHUB_ENV
+          echo "Commit hashes and PR numbers processed."
 
       - name: Pull and Cherry-pick Commits, Then Push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         run: |
+          echo "Pulling the latest changes from the target branch..."
           git fetch origin
           git checkout $TARGET_BRANCH
           git pull origin $TARGET_BRANCH
 
+          echo "Creating new branch $CHERRY_PICK_BRANCH for cherry-picking."
           git checkout -b $CHERRY_PICK_BRANCH
 
-          # Cherry-pick the commits
           for commit_hash in $COMMIT_HASHES; do
             echo "Attempting to cherry-pick commit $commit_hash"
             if ! git cherry-pick "$commit_hash" --strategy=recursive -X theirs; then
-              # Detect if it's a modify/delete conflict
+              echo "Conflict detected during cherry-pick for $commit_hash."
+
               conflict_files=$(git status --porcelain | grep '^UU' | awk '{print $2}')
               
               if [ ! -z "$conflict_files" ]; then
                 for file in $conflict_files; do
-                  # Check if the file was deleted in HEAD and modified in cherry-pick commit
                   if git ls-files --deleted | grep -q "$file"; then
-                    echo "Conflict on $file, deleting file as it was removed in the target branch."
+                    echo "File $file was deleted in the target branch. Deleting it to resolve conflict."
                     git rm "$file"
+                  else
+                    echo "Staging $file to resolve conflict."
                     git add "$file"
                   fi
                 done
-                # Continue after resolving conflicts by removing files
+
+                sleep 2
+
                 git cherry-pick --continue
-              elif git diff --cached --quiet; then
-                echo "Empty commit, committing empty changes..."
-                git commit --allow-empty -m "Cherry-picked empty commit $commit_hash"
+                echo "Resolved conflict for commit $commit_hash. Continuing."
               else
-                echo "Conflict resolved with incoming content"
-                git cherry-pick --continue
+                echo "No conflicts to resolve for $commit_hash."
               fi
+            else
+              echo "Cherry-pick successful for commit $commit_hash."
             fi
+            sleep 3
           done
 
+          sleep 3
           git remote set-url origin "https://${BOT_TOKEN}@github.com/${{ github.repository }}.git"
           git push origin $CHERRY_PICK_BRANCH --force
+          echo "Pushed the cherry-pick branch $CHERRY_PICK_BRANCH."
 
       - name: Create Pull Request
         run: |
           pr_title="deps: Merge ${{ env.pr_numbers_in_title }} PRs into $TARGET_BRANCH"
           pr_body=$(cat pr_body.txt)
 
-          echo "Prepared PR title:"
-          echo "$pr_title"
+          echo "Prepared PR title: $pr_title"
           echo "Prepared PR body:"
           echo "$pr_body"
 
-          # Create the Pull Request (without the label for now)
           response=$(curl -s -X POST -H "Authorization: token $BOT_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             https://api.github.com/repos/${{ github.repository }}/pulls \
@@ -191,14 +192,14 @@ jobs:
               --arg body "$pr_body" \
               '{title: $title, head: $head, base: $base, body: $body}')")
 
-          # Extract the PR number from the response
           pr_number=$(echo "$response" | jq -r '.number')
-
           echo "Created PR #$pr_number"
 
       - name: Add Label to Created Pull Request
         run: |
+          echo "Adding 'milestone-merge' label to PR #$pr_number"
           curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             https://api.github.com/repos/${{ github.repository }}/issues/$pr_number/labels \
             -d "$(jq -n --arg label "milestone-merge" '{labels: [$label]}')"
+          echo "Added label to PR."
