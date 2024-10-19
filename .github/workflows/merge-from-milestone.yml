@@ -34,7 +34,13 @@ jobs:
     steps:
       # Ensure temporary directory is created globally
       - name: Setup temp directory
-        run: mkdir -p ${{ env.TEMP_DIR }}
+        run: |
+          mkdir -p ${{ env.TEMP_DIR }}
+          # Initialize temporary files
+          touch ${{ env.TEMP_DIR }}/pr_numbers.txt
+          touch ${{ env.TEMP_DIR }}/commit_hashes.txt
+          touch ${{ env.TEMP_DIR }}/pr_title.txt
+          touch ${{ env.TEMP_DIR }}/pr_body.txt
 
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -89,6 +95,7 @@ jobs:
 
       - name: Fetch Merge Commits for PRs and Generate Title and Body
         run: |
+          # Ensure the files exist before writing
           > ${{ env.TEMP_DIR }}/commit_hashes.txt
           > ${{ env.TEMP_DIR }}/pr_title.txt
           > ${{ env.TEMP_DIR }}/pr_body.txt
