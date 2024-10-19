@@ -88,76 +88,32 @@ jobs:
           echo "Sorted PR numbers:"
           cat pr_numbers.txt
 
-      - name: Fetch Merge Commits for PRs and Generate Title and Body
-        run: |
-          > commit_hashes.txt
-          > pr_title.txt
-          > pr_body.txt
-
-          # Add Description to pr_body.txt
-          echo "### Description:" >> pr_body.txt
-          echo "Merging PRs from milestone \`$MILESTONE_NAME\` into target branch \`$TARGET_BRANCH\`." >> pr_body.txt
-          echo "" >> pr_body.txt
-          echo "### Need Merge PRs:" >> pr_body.txt
-
-          pr_numbers_in_title=""  # Variable to store PR numbers for the title
-
-          for pr_number in $(cat pr_numbers.txt); do
-            echo "Processing PR #$pr_number"
-            pr_details=$(curl -s -H "Authorization: token $BOT_TOKEN" \
-              -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/repos/${{ github.repository }}/pulls/$pr_number")
-            pr_title=$(echo "$pr_details" | jq -r '.title')
-            merge_commit=$(echo "$pr_details" | jq -r '.merge_commit_sha')
-            short_commit_hash=$(echo "$merge_commit" | cut -c 1-7)
-
-            # Writing the formatted PR information into pr_body.txt
-            echo "- $pr_title: (#$pr_number) ($short_commit_hash)" >> pr_body.txt
-
-            if [ "$merge_commit" != "null" ];then
-              echo "$merge_commit" >> commit_hashes.txt
-              # Append PR number to pr_title.txt and pr_numbers_in_title
-              echo "#$pr_number" >> pr_title.txt
-              pr_numbers_in_title="$pr_numbers_in_title #$pr_number"
-            fi
-          done
-
-          commit_hashes=$(cat commit_hashes.txt | tr '\n' ' ')
-          first_commit_hash=$(head -n 1 commit_hashes.txt)
-          cherry_pick_branch="cherry-pick-${first_commit_hash:0:7}"
-          echo "COMMIT_HASHES=$commit_hashes" >> $GITHUB_ENV
-          echo "CHERRY_PICK_BRANCH=$cherry_pick_branch" >> $GITHUB_ENV
-          echo "pr_numbers_in_title=$pr_numbers_in_title" >> $GITHUB_ENV
-
-      - name: Pull and Cherry-pick Commits, Then Push
+      - name: Apply Patches and Cherry-pick Commits
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         run: |
+          # Fetch and pull the latest changes from the target branch
           git fetch origin
           git checkout $TARGET_BRANCH
           git pull origin $TARGET_BRANCH
 
+          # Create a new branch for cherry-picking
           git checkout -b $CHERRY_PICK_BRANCH
 
-          for commit_hash in $COMMIT_HASHES; do
-            echo "Attempting to cherry-pick commit $commit_hash"
-            if ! git cherry-pick "$commit_hash" --strategy=recursive -X theirs; then
-              # Check if conflict is resolved with incoming changes
-              echo "Resolving conflicts with incoming changes"
-              git add -u  # Mark all resolved files
+          # Generate patches for each commit and apply them
+          for pr_number in $(cat pr_numbers.txt); do
+            echo "Generating patch for PR #$pr_number"
+            git format-patch -1 --stdout "$pr_number" > /tmp/$pr_number.patch
 
-              # Continue after marking conflicts resolved
-              if git diff --cached --quiet; then
-                echo "Empty commit detected, skipping..."
-                git cherry-pick --skip  # Skip empty commits
-              else
-                echo "Continuing after resolving conflicts"
-                git cherry-pick --continue  # Continue after conflict resolution
-              fi
+            echo "Applying patch for PR #$pr_number"
+            if ! git am < /tmp/$pr_number.patch; then
+              echo "Resolving conflicts with incoming changes"
+              git am --skip  # Skip the current patch if it fails
             fi
           done
 
+          # Configure remote URL with BOT_TOKEN for authentication
           git remote set-url origin "https://${BOT_TOKEN}@github.com/${{ github.repository }}.git"
           git push origin $CHERRY_PICK_BRANCH --force
 
