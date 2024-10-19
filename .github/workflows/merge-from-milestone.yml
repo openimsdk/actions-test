@@ -134,27 +134,34 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         run: |
+          # Fetch and pull the latest changes from the target branch
           git fetch origin
           git checkout $TARGET_BRANCH
           git pull origin $TARGET_BRANCH
 
+          # Create a new branch for cherry-picking
           git checkout -b $CHERRY_PICK_BRANCH
 
+          # Cherry-pick the commits
           for commit_hash in $COMMIT_HASHES; do
             echo "Attempting to cherry-pick commit $commit_hash"
             if ! git cherry-pick "$commit_hash" --strategy=recursive -X theirs; then
               if git diff --cached --quiet; then
-                echo "Empty commit, continuing..."
-                git cherry-pick --continue --allow-empty
+                echo "Empty commit detected, skipping..."
+                git cherry-pick --skip  # Skip empty commits (already merged)
               else
-                echo "Conflict resolved with incoming content"
-                git cherry-pick --continue
+                # Mark all conflicts as resolved with incoming changes
+                git add -u
+                echo "Continuing after resolving conflicts"
+                git cherry-pick --continue  # Continue after conflict resolution
               fi
             fi
           done
 
+          # Configure remote URL with BOT_TOKEN for authentication
           git remote set-url origin "https://${BOT_TOKEN}@github.com/${{ github.repository }}.git"
-          git push origin $CHERRY_PICK_BRANCH
+          # Push the cherry-pick branch
+          git push origin $CHERRY_PICK_BRANCH --force
 
       - name: Create Pull Request
         run: |
@@ -183,7 +190,7 @@ jobs:
 
       - name: Add Label to Created Pull Request
         run: |
-          curl -s -X POST -H "Authorization: token $BOT_TOKEN" \
+          curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             https://api.github.com/repos/${{ github.repository }}/issues/$pr_number/labels \
             -d "$(jq -n --arg label "milestone-merge" '{labels: [$label]}')"
