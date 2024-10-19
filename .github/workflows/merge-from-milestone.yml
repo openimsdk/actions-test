@@ -32,6 +32,7 @@ jobs:
   cherry_pick_milestone_prs:
     runs-on: ubuntu-latest
     steps:
+      # Ensure temporary directory is created globally
       - name: Setup temp directory
         run: mkdir -p ${{ env.TEMP_DIR }}
 
@@ -50,6 +51,7 @@ jobs:
         env:
           MILESTONE_NAME: ${{ env.MILESTONE_NAME }}
         run: |
+          # Fetch milestones
           milestones=$(curl -s -H "Authorization: token $BOT_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/${{ github.repository }}/milestones")
@@ -61,6 +63,7 @@ jobs:
           echo "Milestone ID: $milestone_id"
           echo "MILESTONE_ID=$milestone_id" >> $GITHUB_ENV
 
+          # Fetch issues for the milestone and filter PRs without 'cherry-picked' label
           issues=$(curl -s -H "Authorization: token $BOT_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/${{ github.repository }}/issues?milestone=$milestone_id&state=closed&per_page=100")
@@ -89,12 +92,13 @@ jobs:
           > ${{ env.TEMP_DIR }}/pr_title.txt
           > ${{ env.TEMP_DIR }}/pr_body.txt
 
+          # Add Description to pr_body.txt
           echo "### Description:" >> ${{ env.TEMP_DIR }}/pr_body.txt
           echo "Merging PRs from milestone \`$MILESTONE_NAME\` into target branch \`$TARGET_BRANCH\`." >> ${{ env.TEMP_DIR }}/pr_body.txt
           echo "" >> ${{ env.TEMP_DIR }}/pr_body.txt
           echo "### Need Merge PRs:" >> ${{ env.TEMP_DIR }}/pr_body.txt
 
-          pr_numbers_in_title=""  # Variable to store PR numbers for the title
+          pr_numbers_in_title=""
 
           for pr_number in $(cat ${{ env.TEMP_DIR }}/pr_numbers.txt); do
             echo "Processing PR #$pr_number"
@@ -105,6 +109,7 @@ jobs:
             merge_commit=$(echo "$pr_details" | jq -r '.merge_commit_sha')
             short_commit_hash=$(echo "$merge_commit" | cut -c 1-7)
 
+            # Add formatted PR info to pr_body.txt
             echo "- $pr_title: (#$pr_number) ($short_commit_hash)" >> ${{ env.TEMP_DIR }}/pr_body.txt
 
             if [ "$merge_commit" != "null" ]; then
@@ -136,12 +141,10 @@ jobs:
             echo "Attempting to cherry-pick commit $commit_hash"
             if ! git cherry-pick "$commit_hash" --strategy=recursive -X theirs; then
               echo "Conflict detected for $commit_hash. Resolving with incoming changes."
-              # Get the list of conflicting files
               conflict_files=$(git diff --name-only --diff-filter=U)
               echo "Conflicting files:"
               echo "$conflict_files"
 
-              # Resolve conflicts for each conflicting file
               for file in $conflict_files; do
                 if [ -f "$file" ]; then
                   echo "Resolving conflict for $file"
@@ -182,15 +185,14 @@ jobs:
               '{title: $title, head: $head, base: $base, body: $body}')")
 
           pr_number=$(echo "$response" | jq -r '.number')
-          echo "$pr_number" > ${{ env.TEMP_DIR }}/pr_number.txt
+          echo "$pr_number" > ${{ env.TEMP_DIR }}/create_pr_number
 
       - name: Add Label to Created Pull Request
         run: |
-          pr_number=$(cat ${{ env.TEMP_DIR }}/pr_number.txt)
+          pr_number=$(cat ${{ env.TEMP_DIR }}/create_pr_number)
           echo "Adding 'milestone-merge' label to PR #$pr_number"
-          
+
           curl -s -X POST -H "Authorization: token $BOT_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             https://api.github.com/repos/${{ github.repository }}/issues/$pr_number/labels \
             -d "$(jq -n --arg label "milestone-merge" '{labels: [$label]}')"
-
