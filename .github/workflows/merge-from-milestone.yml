@@ -26,7 +26,7 @@ env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
   LABEL_NAME: cherry-picked
-  TEMP_DIR: "./temp"  # Temporary directory for storing PR number and other info
+  TEMP_DIR: ${{ github.workspace }}/temp  # Using GitHub workspace for the temporary directory
 
 jobs:
   cherry_pick_milestone_prs:
@@ -63,13 +63,14 @@ jobs:
           echo "Milestone ID: $milestone_id"
           echo "MILESTONE_ID=$milestone_id" >> $GITHUB_ENV
 
-          # Fetch issues for the milestone and filter PRs without 'cherry-picked' label
+          # Fetch all issues for the milestone
           issues=$(curl -s -H "Authorization: token $BOT_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${{ github.repository }}/issues?milestone=$milestone_id&state=closed&per_page=100")
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/${{ github.repository }}/issues?milestone=$milestone_id&state=closed&per_page=100")
 
           > ${{ env.TEMP_DIR }}/pr_numbers.txt
 
+          # Use for loop to filter PRs that do not have the 'cherry-picked' label
           for pr_number in $(echo "$issues" | jq -r '.[] | select(.pull_request != null) | .number'); do
             labels=$(curl -s -H "Authorization: token $BOT_TOKEN" \
               -H "Accept: application/vnd.github+json" \
@@ -109,10 +110,10 @@ jobs:
             merge_commit=$(echo "$pr_details" | jq -r '.merge_commit_sha')
             short_commit_hash=$(echo "$merge_commit" | cut -c 1-7)
 
-            # Add formatted PR info to pr_body.txt
+            # Writing the formatted PR information into pr_body.txt
             echo "- $pr_title: (#$pr_number) ($short_commit_hash)" >> ${{ env.TEMP_DIR }}/pr_body.txt
 
-            if [ "$merge_commit" != "null" ]; then
+            if [ "$merge_commit" != "null" ];then
               echo "$merge_commit" >> ${{ env.TEMP_DIR }}/commit_hashes.txt
               echo "#$pr_number" >> ${{ env.TEMP_DIR }}/pr_title.txt
               pr_numbers_in_title="$pr_numbers_in_title #$pr_number"
@@ -185,14 +186,11 @@ jobs:
               '{title: $title, head: $head, base: $base, body: $body}')")
 
           pr_number=$(echo "$response" | jq -r '.number')
-          echo "$pr_number" > ${{ env.TEMP_DIR }}/create_pr_number
+          echo "Created PR #$pr_number"
 
       - name: Add Label to Created Pull Request
         run: |
-          pr_number=$(cat ${{ env.TEMP_DIR }}/create_pr_number)
-          echo "Adding 'milestone-merge' label to PR #$pr_number"
-
-          curl -s -X POST -H "Authorization: token $BOT_TOKEN" \
+          curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             https://api.github.com/repos/${{ github.repository }}/issues/$pr_number/labels \
             -d "$(jq -n --arg label "milestone-merge" '{labels: [$label]}')"
