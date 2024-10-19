@@ -26,7 +26,7 @@ env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
   LABEL_NAME: cherry-picked
-  TEMP_DIR: ${{ github.workspace }}/temp  # Using GitHub workspace for the temporary directory
+  TEMP_DIR: /tmp  # Using /tmp as the temporary directory
 
 jobs:
   cherry_pick_milestone_prs:
