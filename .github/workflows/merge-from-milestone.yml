@@ -46,6 +46,7 @@ jobs:
         env:
           MILESTONE_NAME: ${{ env.MILESTONE_NAME }}
         run: |
+          # Fetch milestones
           milestones=$(curl -s -H "Authorization: token $BOT_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/${{ github.repository }}/milestones")
@@ -57,12 +58,14 @@ jobs:
           echo "Milestone ID: $milestone_id"
           echo "MILESTONE_ID=$milestone_id" >> $GITHUB_ENV
 
+          # Fetch all issues for the milestone
           issues=$(curl -s -H "Authorization: token $BOT_TOKEN" \
                 -H "Accept: application/vnd.github+json" \
                 "https://api.github.com/repos/${{ github.repository }}/issues?milestone=$milestone_id&state=closed&per_page=100")
 
           > pr_numbers.txt
 
+          # Filter PRs that do not have the 'cherry-picked' label
           for pr_number in $(echo "$issues" | jq -r '.[] | select(.pull_request != null) | .number'); do
             labels=$(curl -s -H "Authorization: token $BOT_TOKEN" \
               -H "Accept: application/vnd.github+json" \
@@ -79,6 +82,7 @@ jobs:
           echo "Filtered PR numbers:"
           cat pr_numbers.txt || echo "No closed PR numbers found for milestone."
 
+          # Sort PR numbers
           sort -n pr_numbers.txt -o pr_numbers.txt
 
       - name: Pull and Cherry-pick Commits with Conflict Resolution
@@ -91,24 +95,29 @@ jobs:
           git pull origin $TARGET_BRANCH
           git checkout -b $CHERRY_PICK_BRANCH
 
+          # Updated cherry-pick logic
           for commit_hash in $COMMIT_HASHES; do
             echo "Attempting to cherry-pick commit $commit_hash"
             if ! git cherry-pick "$commit_hash" --strategy=recursive -X theirs; then
-              # Handle conflict: resolve deletions or modifications
-              if git status | grep -q "both deleted:"; then
-                echo "Resolving deletion conflict"
-                git rm $(git status | grep "both deleted:" | awk '{print $3}')
+              # Handle file deletion conflicts
+              if git status | grep -q "deleted by us:"; then
+                echo "File deleted in HEAD but present in cherry-pick, removing the file."
+                git rm $(git status | grep "deleted by us:" | awk '{print $3}')
               fi
 
+              # Handle other unmerged paths and conflicts
               if git status | grep -q "Unmerged paths:"; then
-                echo "Resolving remaining conflicts with incoming changes"
+                echo "Resolving remaining conflicts by adding changes."
                 git add .
               fi
 
+              # Continue with the cherry-pick
+              git commit --no-edit --allow-empty || echo "Skipping commit $commit_hash due to unresolved issues"
               git cherry-pick --continue || echo "Skipping commit $commit_hash due to unresolved issues"
             fi
           done
 
+          # Push the cherry-pick branch
           git remote set-url origin "https://${BOT_TOKEN}@github.com/${{ github.repository }}.git"
           git push origin $CHERRY_PICK_BRANCH --force
 
@@ -122,6 +131,7 @@ jobs:
           echo "Prepared PR body:"
           echo "$pr_body"
 
+          # Create the Pull Request (without the label for now)
           response=$(curl -s -X POST -H "Authorization: token $BOT_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             https://api.github.com/repos/${{ github.repository }}/pulls \
@@ -131,7 +141,9 @@ jobs:
               --arg body "$pr_body" \
               '{title: $title, head: $head, base: $base, body: $body}')")
 
+          # Extract the PR number from the response
           pr_number=$(echo "$response" | jq -r '.number')
+
           echo "Created PR #$pr_number"
 
       - name: Add Label to Created Pull Request
