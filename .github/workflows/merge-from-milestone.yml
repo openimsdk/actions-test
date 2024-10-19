@@ -166,13 +166,24 @@ jobs:
           echo "Prepared PR body:"
           echo "$pr_body"
 
-          # Create the Pull Request with the label 'milestone-merge'
-          curl -s -X POST -H "Authorization: token $BOT_TOKEN" \
+          # Create the Pull Request (without the label for now)
+          response=$(curl -s -X POST -H "Authorization: token $BOT_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             https://api.github.com/repos/${{ github.repository }}/pulls \
             -d "$(jq -n --arg title "$pr_title" \
               --arg head "$CHERRY_PICK_BRANCH" \
               --arg base "$TARGET_BRANCH" \
               --arg body "$pr_body" \
-              --argjson labels '["milestone-merge"]' \
-              '{title: $title, head: $head, base: $base, body: $body, labels: $labels}')"
+              '{title: $title, head: $head, base: $base, body: $body}')")
+
+          # Extract the PR number from the response
+          pr_number=$(echo "$response" | jq -r '.number')
+
+          echo "Created PR #$pr_number"
+
+      - name: Add Label to Created Pull Request
+        run: |
+          curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/${{ github.repository }}/issues/$pr_number/labels \
+            -d "$(jq -n --arg label "milestone-merge" '{labels: [$label]}')"
