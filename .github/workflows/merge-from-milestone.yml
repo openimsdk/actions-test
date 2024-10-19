@@ -1,0 +1,189 @@
+name: Create Pre-Release PR from Milestone
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      milestone_name:
+        description: 'Milestone name to collect closed PRs from'
+        required: true
+        default: 'v3.8.2'
+      target_branch:
+        description: 'Target branch to merge the consolidated PR'
+        required: true
+        default: 'pre-release-v3.8.2'
+
+  schedule:
+    - cron: '0 10 * * 0'
+
+env:
+  MILESTONE_NAME: ${{ github.event.inputs.milestone_name || 'v3.8.2' }}
+  TARGET_BRANCH: ${{ github.event.inputs.target_branch || 'pre-release-v3.8.2' }}
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+  LABEL_NAME: cherry-picked
+
+jobs:
+  cherry_pick_milestone_prs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.BOT_TOKEN }}
+
+      - name: Setup Git User for OpenIM-Robot
+        run: |
+          git config --global user.email "OpenIM-Robot@users.noreply.github.com"
+          git config --global user.name "OpenIM-Robot"
+
+      - name: Fetch Milestone ID and Filter PR Numbers
+        env:
+          MILESTONE_NAME: ${{ env.MILESTONE_NAME }}
+        run: |
+          # Fetch milestones
+          milestones=$(curl -s -H "Authorization: token $BOT_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/milestones")
+          milestone_id=$(echo "$milestones" | grep -B3 "\"title\": \"$MILESTONE_NAME\"" | grep '"number":' | head -n1 | grep -o '[0-9]\+')
+          if [ -z "$milestone_id" ]; then
+            echo "Milestone '$MILESTONE_NAME' not found. Exiting."
+            exit 1
+          fi
+          echo "Milestone ID: $milestone_id"
+          echo "MILESTONE_ID=$milestone_id" >> $GITHUB_ENV
+
+          # Fetch all issues for the milestone
+          issues=$(curl -s -H "Authorization: token $BOT_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/${{ github.repository }}/issues?milestone=$milestone_id&state=closed&per_page=100")
+
+          > pr_numbers.txt
+
+          # Use for loop to filter PRs that do not have the 'cherry-picked' label
+          for pr_number in $(echo "$issues" | jq -r '.[] | select(.pull_request != null) | .number'); do
+            labels=$(curl -s -H "Authorization: token $BOT_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/issues/$pr_number/labels" | jq -r '.[].name')
+
+            if ! echo "$labels" | grep -q "${LABEL_NAME}"; then
+              echo "PR #$pr_number does not have the 'cherry-picked' label. Adding to the list."
+              echo "$pr_number" >> pr_numbers.txt
+            else
+              echo "PR #$pr_number already has the 'cherry-picked' label. Skipping."
+            fi
+          done
+
+          echo "Filtered PR numbers:"
+          cat pr_numbers.txt || echo "No closed PR numbers found for milestone."
+
+          # Sort PR numbers
+          sort -n pr_numbers.txt -o pr_numbers.txt
+
+          echo "Sorted PR numbers:"
+          cat pr_numbers.txt
+
+      - name: Fetch Merge Commits for PRs and Generate Title and Body
+        run: |
+          > commit_hashes.txt
+          > pr_title.txt
+          > pr_body.txt
+
+          # Add Description to pr_body.txt
+          echo "### Description:" >> pr_body.txt
+          echo "Merging PRs from milestone \`$MILESTONE_NAME\` into target branch \`$TARGET_BRANCH\`." >> pr_body.txt
+          echo "" >> pr_body.txt
+          echo "### Need Merge PRs:" >> pr_body.txt
+
+          pr_numbers_in_title=""  # Variable to store PR numbers for the title
+
+          for pr_number in $(cat pr_numbers.txt); do
+            echo "Processing PR #$pr_number"
+            pr_details=$(curl -s -H "Authorization: token $BOT_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/pulls/$pr_number")
+            pr_title=$(echo "$pr_details" | jq -r '.title')
+            merge_commit=$(echo "$pr_details" | jq -r '.merge_commit_sha')
+            short_commit_hash=$(echo "$merge_commit" | cut -c 1-7)
+
+            # Writing the formatted PR information into pr_body.txt
+            echo "- $pr_title: (#$pr_number) ($short_commit_hash)" >> pr_body.txt
+
+            if [ "$merge_commit" != "null" ];then
+              echo "$merge_commit" >> commit_hashes.txt
+              # Append PR number to pr_title.txt and pr_numbers_in_title
+              echo "#$pr_number" >> pr_title.txt
+              pr_numbers_in_title="$pr_numbers_in_title #$pr_number"
+            fi
+          done
+
+          commit_hashes=$(cat commit_hashes.txt | tr '\n' ' ')
+          first_commit_hash=$(head -n 1 commit_hashes.txt)
+          cherry_pick_branch="cherry-pick-${first_commit_hash:0:7}"
+          echo "COMMIT_HASHES=$commit_hashes" >> $GITHUB_ENV
+          echo "CHERRY_PICK_BRANCH=$cherry_pick_branch" >> $GITHUB_ENV
+          echo "pr_numbers_in_title=$pr_numbers_in_title" >> $GITHUB_ENV
+
+      - name: Pull and Cherry-pick Commits, Then Push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+        run: |
+          git fetch origin
+          git checkout $TARGET_BRANCH
+          git pull origin $TARGET_BRANCH
+
+          git checkout -b $CHERRY_PICK_BRANCH
+
+          for commit_hash in $COMMIT_HASHES; do
+            echo "Attempting to cherry-pick commit $commit_hash"
+            if ! git cherry-pick "$commit_hash" --strategy=recursive -X theirs; then
+              if git diff --cached --quiet; then
+                echo "Empty commit, continuing..."
+                git cherry-pick --continue --allow-empty
+              else
+                echo "Conflict resolved with incoming content"
+                git cherry-pick --continue
+              fi
+            fi
+          done
+
+          git remote set-url origin "https://${BOT_TOKEN}@github.com/${{ github.repository }}.git"
+          git push origin $CHERRY_PICK_BRANCH
+
+      - name: Create Pull Request
+        run: |
+          pr_title="deps: Merge ${{ env.pr_numbers_in_title }} PRs into $TARGET_BRANCH"
+          pr_body=$(cat pr_body.txt)
+
+          echo "Prepared PR title:"
+          echo "$pr_title"
+          echo "Prepared PR body:"
+          echo "$pr_body"
+
+          # Create the Pull Request (without the label for now)
+          response=$(curl -s -X POST -H "Authorization: token $BOT_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/${{ github.repository }}/pulls \
+            -d "$(jq -n --arg title "$pr_title" \
+              --arg head "$CHERRY_PICK_BRANCH" \
+              --arg base "$TARGET_BRANCH" \
+              --arg body "$pr_body" \
+              '{title: $title, head: $head, base: $base, body: $body}')")
+
+          # Extract the PR number from the response
+          pr_number=$(echo "$response" | jq -r '.number')
+
+          echo "Created PR #$pr_number"
+
+      - name: Add Label to Created Pull Request
+        run: |
+          curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/${{ github.repository }}/issues/$pr_number/labels \
+            -d "$(jq -n --arg label "milestone-merge" '{labels: [$label]}')"
