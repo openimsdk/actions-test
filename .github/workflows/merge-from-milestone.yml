@@ -155,15 +155,11 @@ jobs:
               echo "Conflict detected during cherry-pick for $commit_hash."
 
               # Resolve conflict by accepting incoming changes
-              git add -u  # Add all updated or resolved files
-
-              if git diff --cached --quiet; then
-                echo "Conflict resolved, continuing cherry-pick."
-                git cherry-pick --continue
-              else
-                echo "Empty commit or already resolved. Skipping commit $commit_hash."
-                git cherry-pick --skip
-              fi
+              git add -A  # Add all changes including unmerged files
+              
+              # Continue cherry-pick after resolving conflict
+              git cherry-pick --continue || git cherry-pick --skip
+              echo "Conflicts resolved. Continuing with cherry-pick."
             else
               echo "Cherry-pick successful for commit $commit_hash."
             fi
