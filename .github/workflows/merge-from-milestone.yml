@@ -134,33 +134,31 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         run: |
-          # Fetch and pull the latest changes from the target branch
           git fetch origin
           git checkout $TARGET_BRANCH
           git pull origin $TARGET_BRANCH
 
-          # Create a new branch for cherry-picking
           git checkout -b $CHERRY_PICK_BRANCH
 
-          # Cherry-pick the commits
           for commit_hash in $COMMIT_HASHES; do
             echo "Attempting to cherry-pick commit $commit_hash"
             if ! git cherry-pick "$commit_hash" --strategy=recursive -X theirs; then
+              # Check if conflict is resolved with incoming changes
+              echo "Resolving conflicts with incoming changes"
+              git add -u  # Mark all resolved files
+
+              # Continue after marking conflicts resolved
               if git diff --cached --quiet; then
                 echo "Empty commit detected, skipping..."
-                git cherry-pick --skip  # Skip empty commits (already merged)
+                git cherry-pick --skip  # Skip empty commits
               else
-                # Mark all conflicts as resolved with incoming changes
-                git add -u
                 echo "Continuing after resolving conflicts"
                 git cherry-pick --continue  # Continue after conflict resolution
               fi
             fi
           done
 
-          # Configure remote URL with BOT_TOKEN for authentication
           git remote set-url origin "https://${BOT_TOKEN}@github.com/${{ github.repository }}.git"
-          # Push the cherry-pick branch
           git push origin $CHERRY_PICK_BRANCH --force
 
       - name: Create Pull Request
