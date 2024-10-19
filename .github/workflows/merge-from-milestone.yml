@@ -65,7 +65,7 @@ jobs:
 
           > pr_numbers.txt
 
-          # Filter PRs that do not have the 'cherry-picked' label
+          # Use for loop to filter PRs that do not have the 'cherry-picked' label
           for pr_number in $(echo "$issues" | jq -r '.[] | select(.pull_request != null) | .number'); do
             labels=$(curl -s -H "Authorization: token $BOT_TOKEN" \
               -H "Accept: application/vnd.github+json" \
@@ -85,7 +85,51 @@ jobs:
           # Sort PR numbers
           sort -n pr_numbers.txt -o pr_numbers.txt
 
-      - name: Pull and Cherry-pick Commits with Conflict Resolution
+          echo "Sorted PR numbers:"
+          cat pr_numbers.txt
+
+      - name: Fetch Merge Commits for PRs and Generate Title and Body
+        run: |
+          > commit_hashes.txt
+          > pr_title.txt
+          > pr_body.txt
+
+          # Add Description to pr_body.txt
+          echo "### Description:" >> pr_body.txt
+          echo "Merging PRs from milestone \`$MILESTONE_NAME\` into target branch \`$TARGET_BRANCH\`." >> pr_body.txt
+          echo "" >> pr_body.txt
+          echo "### Need Merge PRs:" >> pr_body.txt
+
+          pr_numbers_in_title=""  # Variable to store PR numbers for the title
+
+          for pr_number in $(cat pr_numbers.txt); do
+            echo "Processing PR #$pr_number"
+            pr_details=$(curl -s -H "Authorization: token $BOT_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/pulls/$pr_number")
+            pr_title=$(echo "$pr_details" | jq -r '.title')
+            merge_commit=$(echo "$pr_details" | jq -r '.merge_commit_sha')
+            short_commit_hash=$(echo "$merge_commit" | cut -c 1-7)
+
+            # Writing the formatted PR information into pr_body.txt
+            echo "- $pr_title: (#$pr_number) ($short_commit_hash)" >> pr_body.txt
+
+            if [ "$merge_commit" != "null" ];then
+              echo "$merge_commit" >> commit_hashes.txt
+              # Append PR number to pr_title.txt and pr_numbers_in_title
+              echo "#$pr_number" >> pr_title.txt
+              pr_numbers_in_title="$pr_numbers_in_title #$pr_number"
+            fi
+          done
+
+          commit_hashes=$(cat commit_hashes.txt | tr '\n' ' ')
+          first_commit_hash=$(head -n 1 commit_hashes.txt)
+          cherry_pick_branch="cherry-pick-${first_commit_hash:0:7}"
+          echo "COMMIT_HASHES=$commit_hashes" >> $GITHUB_ENV
+          echo "CHERRY_PICK_BRANCH=$cherry_pick_branch" >> $GITHUB_ENV
+          echo "pr_numbers_in_title=$pr_numbers_in_title" >> $GITHUB_ENV
+
+      - name: Pull and Cherry-pick Commits, Then Push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
@@ -93,31 +137,37 @@ jobs:
           git fetch origin
           git checkout $TARGET_BRANCH
           git pull origin $TARGET_BRANCH
+
           git checkout -b $CHERRY_PICK_BRANCH
 
-          # Updated cherry-pick logic
+          # Cherry-pick the commits
           for commit_hash in $COMMIT_HASHES; do
             echo "Attempting to cherry-pick commit $commit_hash"
             if ! git cherry-pick "$commit_hash" --strategy=recursive -X theirs; then
-              # Handle file deletion conflicts
-              if git status | grep -q "deleted by us:"; then
-                echo "File deleted in HEAD but present in cherry-pick, removing the file."
-                git rm $(git status | grep "deleted by us:" | awk '{print $3}')
+              # Detect if it's a modify/delete conflict
+              conflict_files=$(git status --porcelain | grep '^UU' | awk '{print $2}')
+              
+              if [ ! -z "$conflict_files" ]; then
+                for file in $conflict_files; do
+                  # Check if the file was deleted in HEAD and modified in cherry-pick commit
+                  if git ls-files --deleted | grep -q "$file"; then
+                    echo "Conflict on $file, deleting file as it was removed in the target branch."
+                    git rm "$file"
+                    git add "$file"
+                  fi
+                done
+                # Continue after resolving conflicts by removing files
+                git cherry-pick --continue
+              elif git diff --cached --quiet; then
+                echo "Empty commit, committing empty changes..."
+                git commit --allow-empty -m "Cherry-picked empty commit $commit_hash"
+              else
+                echo "Conflict resolved with incoming content"
+                git cherry-pick --continue
               fi
-
-              # Handle other unmerged paths and conflicts
-              if git status | grep -q "Unmerged paths:"; then
-                echo "Resolving remaining conflicts by adding changes."
-                git add .
-              fi
-
-              # Continue with the cherry-pick
-              git commit --no-edit --allow-empty || echo "Skipping commit $commit_hash due to unresolved issues"
-              git cherry-pick --continue || echo "Skipping commit $commit_hash due to unresolved issues"
             fi
           done
 
-          # Push the cherry-pick branch
           git remote set-url origin "https://${BOT_TOKEN}@github.com/${{ github.repository }}.git"
           git push origin $CHERRY_PICK_BRANCH --force
 
