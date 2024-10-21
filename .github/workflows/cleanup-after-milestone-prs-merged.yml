@@ -1,9 +1,9 @@
-name: Handle PR Branch Based on Title and Label
+name: Cleanup After Milestone PRs Merged
 
 on:
   pull_request:
     types:
-      - closed  # Trigger when PR is closed (merged or not)
+      - closed
 
 jobs:
   handle_pr:
