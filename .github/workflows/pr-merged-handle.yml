@@ -3,7 +3,7 @@ name: Handle PR Branch Based on Title and Label
 on:
   pull_request:
     types:
-      - closed  # Trigger when PR is closed (merged or not)
+      - closed
 
 jobs:
   handle_pr:
@@ -13,51 +13,40 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v3
 
-    - name: Get the PR title and labels, extract PR numbers
-      id: check_conditions
+    - name: Get the PR title and extract PR numbers
+      id: extract_pr_numbers
       run: |
-        # Get the PR title and labels
+        # Get the PR title
         PR_TITLE="${{ github.event.pull_request.title }}"
-        PR_LABELS=$(echo "${{ toJSON(github.event.pull_request.labels) }}" | jq -r '.[].name')
 
         echo "PR Title: $PR_TITLE"
-        echo "PR Labels: $PR_LABELS"
 
         # Extract PR numbers from the title
         PR_NUMBERS=$(echo "$PR_TITLE" | grep -oE "#[0-9]+" | tr '\n' ' ')
         echo "Extracted PR Numbers: $PR_NUMBERS"
 
-        # Save PR numbers to a file for later use
+        # Save PR numbers to a file
         echo "$PR_NUMBERS" > pr_numbers.txt
         echo "Saved PR Numbers to pr_numbers.txt"
 
-        # Check if title matches the dynamic pattern or has the 'milestone-merge' label
-        if echo "$PR_TITLE" | grep -qE "^deps: Merge( #[0-9]+)+ PRs into .+" || echo "$PR_LABELS" | grep -q "milestone-merge"; then
-          echo "Condition matched, setting proceed=true"
-          echo "proceed=true" >> $GITHUB_ENV  # Write to environment file
+        # Check if the title matches a specific pattern
+        if echo "$PR_TITLE" | grep -qE "^deps: Merge( #[0-9]+)+ PRs into .+"; then
+          echo "proceed=true" >> $GITHUB_OUTPUT
         else
-          echo "Condition did not match, setting proceed=false"
-          echo "proceed=false" >> $GITHUB_ENV  # Write to environment file
+          echo "proceed=false" >> $GITHUB_OUTPUT
         fi
 
     - name: Delete branch after PR close
-      if: env.proceed == 'true'
+      if: steps.extract_pr_numbers.outputs.proceed == 'true' || contains(github.event.pull_request.labels.*.name, 'milestone-merge')
       run: |
-        BRANCH_NAME=$(echo "${{ github.event.pull_request.head.ref }}")
+        BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
         echo "Branch to delete: $BRANCH_NAME"
-        git push origin --delete $BRANCH_NAME
+        git push origin --delete "$BRANCH_NAME"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Use extracted PR numbers from file
-      run: |
-        # Read PR numbers from the file saved earlier
-        PR_NUMBERS=$(cat pr_numbers.txt)
-        echo "Using extracted PR Numbers: $PR_NUMBERS"
-        # Example use: you can loop through these numbers or use them in other operations
-
     - name: Label PR if merged
-      if: env.proceed == 'true' && github.event.pull_request.merged == true
+      if: (steps.extract_pr_numbers.outputs.proceed == 'true' || contains(github.event.pull_request.labels.*.name, 'milestone-merge')) && github.event.pull_request.merged == true
       run: |
         PR_NUMBER=${{ github.event.pull_request.number }}
         echo "PR #$PR_NUMBER was merged."
@@ -69,3 +58,11 @@ jobs:
           -d '{"labels":["cherry-picked"]}'
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Use extracted PR numbers from file
+      if: steps.extract_pr_numbers.outputs.proceed == 'true' || contains(github.event.pull_request.labels.*.name, 'milestone-merge')
+      run: |
+        # Read the previously saved PR numbers
+        PR_NUMBERS=$(cat pr_numbers.txt)
+        echo "Using extracted PR Numbers: $PR_NUMBERS"
+        # Example: You can perform operations using the extracted PR numbers
