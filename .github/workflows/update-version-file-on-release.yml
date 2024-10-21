@@ -9,21 +9,26 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TAG_VERSION: ${{ github.event.release.tag_name }}
-      BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
     steps:
-      # Step 1: Checkout the original repository's code
+      # Step 1: Checkout the repository's code
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Fetch all history including tags
+          fetch-depth: 0
 
       # Step 2: Set up Git with official account
       - name: Set up Git
         run: |
-          git config user.name "OpenIM-Robot"
-          git config user.email "OpenIM-Robot@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      # Step 3: Check and delete existing tag
+      # Step 3: Switch to the main branch
+      - name: Switch to main branch
+        run: |
+          git checkout main
+          git pull origin main
+
+      # Step 4: Check and delete the existing tag (if present)
       - name: Check and delete existing tag
         run: |
           if git rev-parse ${{ env.TAG_VERSION }} >/dev/null 2>&1; then
@@ -31,34 +36,33 @@ jobs:
             git push --delete origin ${{ env.TAG_VERSION }}  # Delete remote tag
           fi
 
-      # Step 4: Update version file
+      # Step 5: Update the version file
       - name: Update version file
         run: |
-          echo "${{ env.TAG_VERSION }}" > version/version  # Write version to file
+          echo "${{ env.TAG_VERSION }}" > version/version  # Write the version to the file
 
-      # Step 5: Commit and push changes to the correct branch
+      # Step 6: Commit and push changes to the main branch
       - name: Commit and push changes
-        env:
-          # GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.BOT_TOKEN }}
-        run: |
-          git add version/version
-          git commit -m "Update version to ${{ env.TAG_VERSION }}"
-          git push origin HEAD:${{ github.ref }}  # Push to the current branch
-
-      # Step 6: Create and push new tag
-      - name: Create and push tag
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git tag ${{ env.TAG_VERSION }}  # Create new tag
-          git push origin ${{ env.TAG_VERSION }}  # Push the tag
+          git add version/version
+          git commit -m "Update version to ${{ env.TAG_VERSION }}"
+          git push origin main  # Push to the main branch
 
-      # Step 7: Find and Publish Draft Release
+      # Step 7: Create and push the new tag
+      - name: Create and push new tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git tag ${{ env.TAG_VERSION }}  # Create the new tag
+          git push origin ${{ env.TAG_VERSION }}  # Push the tag to the remote repository
+
+      # Step 8: Find and publish the draft release
       - name: Find and Publish Draft Release
         uses: actions/github-script@v6
         with:
-          github-token: ${{ secrets.BOT_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             // Get the list of releases
             const releases = await github.rest.repos.listReleases({
