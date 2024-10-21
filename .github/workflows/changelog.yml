@@ -1,0 +1,66 @@
+name: Update Changelog
+
+on:
+  release:
+    types: [released]  # Trigger the workflow when a new release is published
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-changelog:
+    runs-on: ubuntu-latest  # Use the latest Ubuntu environment
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4  # Checkout the repository code
+
+    - name: Get release info
+      id: get_release
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const { data: release } = await github.rest.repos.getReleaseByTag({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            tag: context.payload.release.tag_name
+          });
+          return release.body;  # Return the content of the release notes
+
+    - name: Prepend release notes to CHANGELOG.md
+      run: |
+        # If CHANGELOG.md does not exist, create an empty one
+        if [ ! -f CHANGELOG.md ]; then
+          touch CHANGELOG.md
+        fi
+
+        # Write the new release notes into a temporary file 'new_changelog.md'
+        echo "## ${{ github.event.release.tag_name }} - $(date '+%Y-%m-%d')" > new_changelog.md
+        echo "" >> new_changelog.md
+        echo "${{ steps.get_release.outputs.result }}" >> new_changelog.md
+        echo "" >> new_changelog.md
+
+        # Append the current CHANGELOG.md content to the temporary file
+        cat CHANGELOG.md >> new_changelog.md
+
+        # Replace the original CHANGELOG.md with the updated one
+        mv new_changelog.md CHANGELOG.md
+
+    - name: Commit changes to a new branch
+      run: |
+        # Create a new branch with a unique name
+        git checkout -b update-changelog-${{ github.event.release.tag_name }}
+        git add CHANGELOG.md  # Add the updated CHANGELOG.md file to git
+        git commit -m "Update CHANGELOG.md for release ${{ github.event.release.tag_name }}"  # Commit the changes
+        git push origin update-changelog-${{ github.event.release.tag_name }}  # Push the changes to the new branch
+
+    - name: Create Pull Request
+      uses: peter-evans/create-pull-request@v7.0.5
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}  # Use the repository token to authenticate
+        branch: update-changelog-${{ github.event.release.tag_name }}  # Use the newly created branch
+        title: "Update CHANGELOG for release ${{ github.event.release.tag_name }}"  # Title of the PR
+        body: "This PR updates the CHANGELOG.md with the notes for release ${{ github.event.release.tag_name }}"  # Description of the PR
+        base: main  # Target the 'main' branch for the PR
+        delete-branch: true  # Delete the branch after the PR is merged
+        labels: changelog  # Add a label to the PR
