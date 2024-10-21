@@ -13,22 +13,30 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v3
 
-    - name: Check for 'milestone-merge' label or Title Pattern
+    - name: Get the PR title and labels, extract PR numbers
       id: check_conditions
       run: |
         # Get the PR title and labels
         PR_TITLE="${{ github.event.pull_request.title }}"
-        PR_LABELS=$(echo "${{ github.event.pull_request.labels[*].name }}" | tr -d '[],"')
-        TARGET_BRANCH="${{ github.event.pull_request.base.ref }}"  # Get the target branch
+        PR_LABELS=$(echo "${{ toJSON(github.event.pull_request.labels) }}" | jq -r '.[].name')
 
         echo "PR Title: $PR_TITLE"
         echo "PR Labels: $PR_LABELS"
-        echo "Target branch: $TARGET_BRANCH"
+
+        # Extract PR numbers from the title
+        PR_NUMBERS=$(echo "$PR_TITLE" | grep -oE "#[0-9]+" | tr '\n' ' ')
+        echo "Extracted PR Numbers: $PR_NUMBERS"
+
+        # Save PR numbers to a file for later use
+        echo "$PR_NUMBERS" > pr_numbers.txt
+        echo "Saved PR Numbers to pr_numbers.txt"
 
         # Check if title matches the dynamic pattern or has the 'milestone-merge' label
-        if echo "$PR_TITLE" | grep -qE "^deps: Merge #([0-9]+ )+# PRs into .+" || echo "$PR_LABELS" | grep -q "milestone-merge"; then
+        if echo "$PR_TITLE" | grep -qE "^deps: Merge( #[0-9]+)+ PRs into .+" || echo "$PR_LABELS" | grep -q "milestone-merge"; then
+          echo "Condition matched, setting proceed=true"
           echo "proceed=true" >> $GITHUB_ENV  # Write to environment file
         else
+          echo "Condition did not match, setting proceed=false"
           echo "proceed=false" >> $GITHUB_ENV  # Write to environment file
         fi
 
@@ -41,11 +49,18 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+    - name: Use extracted PR numbers from file
+      run: |
+        # Read PR numbers from the file saved earlier
+        PR_NUMBERS=$(cat pr_numbers.txt)
+        echo "Using extracted PR Numbers: $PR_NUMBERS"
+        # Example use: you can loop through these numbers or use them in other operations
+
     - name: Label PR if merged
       if: env.proceed == 'true' && github.event.pull_request.merged == true
       run: |
         PR_NUMBER=${{ github.event.pull_request.number }}
-        echo "PR #$PR_NUMBER was merged into $TARGET_BRANCH."
+        echo "PR #$PR_NUMBER was merged."
         echo "Adding 'cherry-picked' label to merged PR."
         curl -X POST \
           -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
