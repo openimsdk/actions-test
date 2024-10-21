@@ -1,3 +1,7 @@
+## v0.0.41 - 2024-10-21
+
+**Full Changelog**: https://github.com/openimsdk/actions-test/compare/v0.0.40...v0.0.41
+
 ## v0.0.34 - 2024-10-21
 
 ## What's Changed
