@@ -89,6 +89,9 @@ jobs:
           echo "Filtered PR numbers:"
           cat ${{ env.TEMP_DIR }}/pr_numbers.txt || echo "No closed PR numbers found for milestone."
 
+          # Sort PR numbers before proceeding
+          sort -n ${{ env.TEMP_DIR }}/pr_numbers.txt -o ${{ env.TEMP_DIR }}/pr_numbers.txt
+
       - name: Fetch Merge Commits for PRs and Generate Title and Body
         run: |
           > ${{ env.TEMP_DIR }}/commit_hashes.txt
@@ -138,7 +141,7 @@ jobs:
 
           git checkout -b $CHERRY_PICK_BRANCH
 
-          conflict_detected=false  # 标记是否检测到复杂冲突
+          conflict_detected=false  # Flag to check if conflicts were detected
 
           for commit_hash in $COMMIT_HASHES; do
             echo "Attempting to cherry-pick commit $commit_hash"
@@ -159,28 +162,24 @@ jobs:
                 fi
               done
 
-              # 检查冲突是否成功解决
               if git diff --cached --quiet; then
                 echo "Conflicts resolved for $commit_hash. Continuing cherry-pick."
                 git cherry-pick --continue
               else
-                # 如果冲突未解决，标记为复杂冲突
                 echo "Complex conflict detected for $commit_hash. Manual resolution needed."
                 conflict_detected=true
-                git cherry-pick --quit  # 退出 cherry-pick 并提交冲突
+                git cherry-pick --quit
               fi
             else
               echo "Cherry-pick successful for commit $commit_hash."
             fi
 
-            # 检查是否为空提交
             if git diff --cached --quiet; then
               echo "Detected empty commit for $commit_hash. Submitting as an empty commit."
               git commit --allow-empty -m "Empty commit for $commit_hash (already merged or no changes)"
             fi
           done
 
-          # 如果存在复杂冲突，通知需要手动解决
           if [ "$conflict_detected" = true ]; then
             echo "Conflicts detected during the cherry-pick process."
             echo "These conflicts will be left for manual resolution in the PR."
@@ -188,7 +187,6 @@ jobs:
             echo "No complex conflicts detected during cherry-pick."
           fi
 
-          # Push the branch with potential conflicts to the remote repository
           git remote set-url origin "https://${BOT_TOKEN}@github.com/${{ github.repository }}.git"
           git push origin $CHERRY_PICK_BRANCH --force
           echo "Pushed branch $CHERRY_PICK_BRANCH with potential conflicts. PR will require manual conflict resolution."
