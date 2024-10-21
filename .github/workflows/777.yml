@@ -1,4 +1,4 @@
-name: Create Pre-Release PR from Milestone 123
+name: Create Pre-Release PR from Milestone
 
 permissions:
   contents: write
@@ -138,23 +138,20 @@ jobs:
 
           git checkout -b $CHERRY_PICK_BRANCH
 
-          conflict_detected=false  # Flag to check if conflicts were detected
+          conflict_detected=false  # 标记是否检测到复杂冲突
 
           for commit_hash in $COMMIT_HASHES; do
             echo "Attempting to cherry-pick commit $commit_hash"
-            
-            # Cherry-pick commit and handle conflicts
             if ! git cherry-pick "$commit_hash" --strategy=recursive -X theirs; then
-              echo "Conflict detected for $commit_hash."
+              echo "Conflict detected for $commit_hash. Resolving with incoming changes."
               
-              # Capture conflicting files and try to auto-resolve simple conflicts
               conflict_files=$(git diff --name-only --diff-filter=U)
-              echo "Conflicting files for $commit_hash:"
+              echo "Conflicting files:"
               echo "$conflict_files"
 
               for file in $conflict_files; do
                 if [ -f "$file" ]; then
-                  echo "Auto-resolving conflict for $file using incoming changes."
+                  echo "Resolving conflict for $file using incoming changes."
                   git add "$file"
                 else
                   echo "File $file has been deleted. Skipping."
@@ -162,37 +159,39 @@ jobs:
                 fi
               done
 
-              # Check if all conflicts were resolved automatically
+              # 检查冲突是否成功解决
               if git diff --cached --quiet; then
-                echo "Simple conflicts resolved for $commit_hash. Continuing cherry-pick."
+                echo "Conflicts resolved for $commit_hash. Continuing cherry-pick."
                 git cherry-pick --continue
               else
-                # Mark that a complex conflict was detected
+                # 如果冲突未解决，标记为复杂冲突
                 echo "Complex conflict detected for $commit_hash. Manual resolution needed."
                 conflict_detected=true
-                git cherry-pick --quit  # Quit the cherry-pick to leave the conflict state
+                git cherry-pick --quit  # 退出 cherry-pick 并提交冲突
               fi
             else
               echo "Cherry-pick successful for commit $commit_hash."
             fi
 
-            # Check for empty commit
+            # 检查是否为空提交
             if git diff --cached --quiet; then
               echo "Detected empty commit for $commit_hash. Submitting as an empty commit."
               git commit --allow-empty -m "Empty commit for $commit_hash (already merged or no changes)"
             fi
           done
 
-          # Push the branch with conflicts (if any) to the remote repository
+          # 如果存在复杂冲突，通知需要手动解决
           if [ "$conflict_detected" = true ]; then
-            echo "Complex conflicts detected during cherry-pick. Manual resolution required."
+            echo "Conflicts detected during the cherry-pick process."
+            echo "These conflicts will be left for manual resolution in the PR."
           else
             echo "No complex conflicts detected during cherry-pick."
           fi
 
+          # Push the branch with potential conflicts to the remote repository
           git remote set-url origin "https://${BOT_TOKEN}@github.com/${{ github.repository }}.git"
           git push origin $CHERRY_PICK_BRANCH --force
-          echo "Pushed branch $CHERRY_PICK_BRANCH with potential conflicts."
+          echo "Pushed branch $CHERRY_PICK_BRANCH with potential conflicts. PR will require manual conflict resolution."
 
       - name: Create Pull Request
         run: |
