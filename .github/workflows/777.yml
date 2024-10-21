@@ -1,4 +1,4 @@
-name: Create Pre-Release PR from Milestone
+name: Create Pre-Release PR from Milestone 123
 
 permissions:
   contents: write
