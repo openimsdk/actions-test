@@ -47,14 +47,6 @@ jobs:
         # Replace the original CHANGELOG.md with the updated one
         mv new_changelog.md CHANGELOG.md
 
-    - name: Commit changes to a new branch
-      run: |
-        # Create a new branch with a unique name
-        git checkout -b update-changelog-${{ github.event.release.tag_name }}
-        git add CHANGELOG.md  # Add the updated CHANGELOG.md file to git
-        git commit -m "Update CHANGELOG.md for release ${{ github.event.release.tag_name }}"  # Commit the changes
-        git push origin update-changelog-${{ github.event.release.tag_name }}  # Push the changes to the new branch
-
     - name: Create Pull Request
       uses: peter-evans/create-pull-request@v7.0.5
       with:
