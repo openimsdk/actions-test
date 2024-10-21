@@ -15,17 +15,18 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4  # Checkout the repository code
 
-    - name: Get release info
+    - name: Get release info via curl
       id: get_release
-      uses: actions/github-script@v6
-      with:
-        script: |
-          const { data: release } = await github.rest.repos.getReleaseByTag({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            tag: context.payload.release.tag_name
-          });
-          return release.body;  # Return the content of the release notes
+      run: |
+        # Use curl to fetch release information from the GitHub API
+        curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+        https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ github.event.release.tag_name }} \
+        | jq -r '.body' > release_notes.txt
+
+    - name: Debug release info
+      run: |
+        echo "Release tag: ${{ github.event.release.tag_name }}"
+        cat release_notes.txt  # Output the fetched release notes for debugging
 
     - name: Prepend release notes to CHANGELOG.md
       run: |
@@ -37,7 +38,7 @@ jobs:
         # Write the new release notes into a temporary file 'new_changelog.md'
         echo "## ${{ github.event.release.tag_name }} - $(date '+%Y-%m-%d')" > new_changelog.md
         echo "" >> new_changelog.md
-        echo "${{ steps.get_release.outputs.result }}" >> new_changelog.md
+        cat release_notes.txt >> new_changelog.md
         echo "" >> new_changelog.md
 
         # Append the current CHANGELOG.md content to the temporary file
