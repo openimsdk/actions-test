@@ -3,7 +3,7 @@ name: Handle PR Branch Based on Title and Label
 on:
   pull_request:
     types:
-      - closed
+      - closed  # Trigger when PR is closed (merged or not)
 
 jobs:
   handle_pr:
@@ -19,19 +19,21 @@ jobs:
         # Get the PR title and labels
         PR_TITLE="${{ github.event.pull_request.title }}"
         PR_LABELS=$(echo "${{ github.event.pull_request.labels[*].name }}" | tr -d '[],"')
+        TARGET_BRANCH="${{ github.event.pull_request.base.ref }}"  # Get the target branch
 
         echo "PR Title: $PR_TITLE"
         echo "PR Labels: $PR_LABELS"
+        echo "Target branch: $TARGET_BRANCH"
 
         # Check if title matches the dynamic pattern or has the 'milestone-merge' label
         if echo "$PR_TITLE" | grep -qE "^deps: Merge #([0-9]+ )+# PRs into .+" || echo "$PR_LABELS" | grep -q "milestone-merge"; then
-          echo "::set-output name=proceed::true"
+          echo "proceed=true" >> $GITHUB_ENV  # Write to environment file
         else
-          echo "::set-output name=proceed::false"
+          echo "proceed=false" >> $GITHUB_ENV  # Write to environment file
         fi
 
     - name: Delete branch after PR close
-      if: steps.check_conditions.outputs.proceed == 'true'
+      if: env.proceed == 'true'
       run: |
         BRANCH_NAME=$(echo "${{ github.event.pull_request.head.ref }}")
         echo "Branch to delete: $BRANCH_NAME"
@@ -40,10 +42,10 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Label PR if merged
-      if: steps.check_conditions.outputs.proceed == 'true' && github.event.pull_request.merged == true
+      if: env.proceed == 'true' && github.event.pull_request.merged == true
       run: |
         PR_NUMBER=${{ github.event.pull_request.number }}
-        echo "PR #$PR_NUMBER was merged."
+        echo "PR #$PR_NUMBER was merged into $TARGET_BRANCH."
         echo "Adding 'cherry-picked' label to merged PR."
         curl -X POST \
           -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
