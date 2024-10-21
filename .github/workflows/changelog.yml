@@ -15,10 +15,9 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4  # Checkout the repository code
 
-    - name: Get release info via curl
-      id: get_release
+    - name: Get release notes via curl
       run: |
-        # Use curl to fetch release information from the GitHub API
+        # Use curl to fetch the release body from GitHub API
         curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
         https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ github.event.release.tag_name }} \
         | jq -r '.body' > release_notes.txt
@@ -26,9 +25,10 @@ jobs:
     - name: Debug release info
       run: |
         echo "Release tag: ${{ github.event.release.tag_name }}"
+        echo "Release body:"
         cat release_notes.txt  # Output the fetched release notes for debugging
 
-    - name: Prepend release notes to CHANGELOG.md
+    - name: Prepend release notes to CHANGELOG.md and clean up
       run: |
         # If CHANGELOG.md does not exist, create an empty one
         if [ ! -f CHANGELOG.md ]; then
@@ -47,11 +47,14 @@ jobs:
         # Replace the original CHANGELOG.md with the updated one
         mv new_changelog.md CHANGELOG.md
 
+        # Delete the release notes temporary file
+        rm release_notes.txt
+
     - name: Create Pull Request
       uses: peter-evans/create-pull-request@v7.0.5
       with:
         token: ${{ secrets.GITHUB_TOKEN }}  # Use the repository token to authenticate
-        branch: update-changelog-${{ github.event.release.tag_name }}  # Use the newly created branch
+        commit-message: "Update CHANGELOG.md for release ${{ github.event.release.tag_name }}"  # Commit message for the PR
         title: "Update CHANGELOG for release ${{ github.event.release.tag_name }}"  # Title of the PR
         body: "This PR updates the CHANGELOG.md with the notes for release ${{ github.event.release.tag_name }}"  # Description of the PR
         base: main  # Target the 'main' branch for the PR
