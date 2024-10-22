@@ -3,6 +3,7 @@ name: Release Changelog
 on:
   release:
     types: [released]
+
 permissions:
   contents: write
   pull-requests: write
@@ -25,25 +26,31 @@ jobs:
 
     - name: Handle changelog files
       run: |
-        # Remove the 'v' prefix from the tag name
+        # Remove the 'v' prefix from the tag name and extract Major.Minor version
         TAG_NAME=${{ github.event.release.tag_name }}
-        NAME_WITHOUT_V=$(echo "$TAG_NAME" | sed 's/^v//')
-
-        # Create the CHANGELOG directory if it doesn't exist
-        mkdir -p CHANGELOG
+        CHANGELOG_VERSION_NUMBER=$(echo "$TAG_NAME" | sed 's/^v//' | grep -oP '^\d+\.\d+')
 
         # Define the new changelog file path
-        NEW_CHANGELOG_PATH="CHANGELOG/CHANGELOG-$NAME_WITHOUT_V.md"
+        CHANGELOG_FILENAME="CHANGELOG-$CHANGELOG_VERSION_NUMBER.md"
+        CHANGELOG_PATH="CHANGELOG/$CHANGELOG_FILENAME"
 
         # Check if the changelog file for the current release already exists
-        if [ -f "$NEW_CHANGELOG_PATH" ]; then
+        if [ -f "$CHANGELOG_PATH" ]; then
           # If the file exists, append the current content to the temporary changelog
-          cat "$NEW_CHANGELOG_PATH" >> "${TAG_NAME}-changelog.md"
+          cat "$CHANGELOG_PATH" >> "${TAG_NAME}-changelog.md"
           # Overwrite the existing changelog with the updated content
-          mv "${TAG_NAME}-changelog.md" "$NEW_CHANGELOG_PATH"
+          mv "${TAG_NAME}-changelog.md" "$CHANGELOG_PATH"
         else
           # If it doesn't exist, rename the temp changelog to the new changelog file
-          mv "${TAG_NAME}-changelog.md" "$NEW_CHANGELOG_PATH"
+          mv "${TAG_NAME}-changelog.md" "$CHANGELOG_PATH"
+
+          # Update CHANGELOG/README.md with the new file in reverse order
+          if [ ! -f "CHANGELOG/README.md" ]; then
+            echo "# CHANGELOGs" > CHANGELOG/README.md
+          fi
+          
+          # Insert the new changelog at the top of the README.md file
+          sed -i "2i- [$CHANGELOG_FILENAME](./$CHANGELOG_FILENAME)" CHANGELOG/README.md
         fi
 
     - name: Clean up
@@ -54,11 +61,11 @@ jobs:
     - name: Create Pull Request
       uses: peter-evans/create-pull-request@v7.0.5
       with:
-        token: ${{ secrets.GITHUB_TOKEN }}  # Use the repository token to authenticate
-        commit-message: "Update CHANGELOG for release ${{ github.event.release.tag_name }}"  # Commit message for the PR
-        title: "Update CHANGELOG for release ${{ github.event.release.tag_name }}"  # Title of the PR
-        body: "This PR updates the CHANGELOG files for release ${{ github.event.release.tag_name }}"  # Description of the PR
+        token: ${{ secrets.GITHUB_TOKEN }}
+        commit-message: "Update CHANGELOG for release ${{ github.event.release.tag_name }}"
+        title: "Update CHANGELOG for release ${{ github.event.release.tag_name }}"
+        body: "This PR updates the CHANGELOG files for release ${{ github.event.release.tag_name }}"
         branch: changelog-${{ github.event.release.tag_name }} 
         base: main 
         delete-branch: true
-        labels: changelog  # Add a label to the PR
+        labels: changelog
