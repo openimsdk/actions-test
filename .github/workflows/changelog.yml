@@ -46,11 +46,11 @@ jobs:
 
           # Update CHANGELOG/README.md with the new file in reverse order
           if [ ! -f "CHANGELOG/README.md" ]; then
-            echo "# CHANGELOGs" > CHANGELOG/README.md
+            echo -e "# CHANGELOGs\n" > CHANGELOG/README.md
           fi
           
           # Insert the new changelog at the top of the README.md file
-          sed -i "2i- [$CHANGELOG_FILENAME](./$CHANGELOG_FILENAME)" CHANGELOG/README.md
+          sed -i "2s/^/- [$CHANGELOG_FILENAME](./$CHANGELOG_FILENAME)\n/" CHANGELOG/README.md
         fi
 
     - name: Clean up
