@@ -10,6 +10,16 @@ import (
 	"strings"
 )
 
+// You can specify a tag as a command line argument to generate the changelog for a specific version.
+// Example: go run tools/changelog.go v0.0.33
+// If no tag is provided, the latest release will be used.
+
+// Setting repo owner and repo name by generate changelog
+const (
+	repoOwner = "openimsdk"
+	repoName  = "actions-test"
+)
+
 // GitHubRepo struct represents the repo details.
 type GitHubRepo struct {
 	Owner         string
@@ -32,6 +42,7 @@ func (g *GitHubRepo) classifyReleaseNotes(body string) map[string][]string {
 		"fix":      {},
 		"chore":    {},
 		"refactor": {},
+		"build":    {},
 		"other":    {},
 	}
 
@@ -64,6 +75,8 @@ func (g *GitHubRepo) classifyReleaseNotes(body string) map[string][]string {
 				category = "chore"
 			} else if strings.HasPrefix(line, "* refactor") {
 				category = "refactor"
+			} else if strings.HasPrefix(line, "* build") {
+				category = "build"
 			} else {
 				category = "other"
 			}
@@ -108,11 +121,13 @@ func (g *GitHubRepo) generateChangelog(tag, date, htmlURL, body string) string {
 	if len(sections["refactor"]) > 0 {
 		changelog += "### Refactors\n" + strings.Join(sections["refactor"], "\n") + "\n\n"
 	}
+	if len(sections["build"]) > 0 {
+		changelog += "### Builds\n" + strings.Join(sections["build"], "\n") + "\n\n"
+	}
 	if len(sections["other"]) > 0 {
 		changelog += "### Others\n" + strings.Join(sections["other"], "\n") + "\n\n"
 	}
 
-	// Add the Full Changelog link at the end, if available.
 	if g.FullChangelog != "" {
 		changelog += fmt.Sprintf("**Full Changelog**: %s\n", g.FullChangelog)
 	}
@@ -153,13 +168,11 @@ func (g *GitHubRepo) fetchReleaseData(version string) (*ReleaseData, error) {
 }
 
 func main() {
-	// Create a new GitHubRepo instance
-	repoOwner := "openimsdk"
-	repoName := "actions-test"
 	repo := &GitHubRepo{Owner: repoOwner, Repo: repoName}
 
 	// Get the version from command line arguments, if provided
-	var version string
+	var version string // Default is use latest
+
 	if len(os.Args) > 1 {
 		version = os.Args[1] // Use the provided version
 	}
