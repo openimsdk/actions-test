@@ -1,62 +1,63 @@
-name: Update Changelog
+name: Release Changelog
 
 on:
   release:
-    types: [released]  # Trigger the workflow when a new release is published
-
+    types: [released]
 permissions:
   contents: write
   pull-requests: write
 
 jobs:
   update-changelog:
-    runs-on: ubuntu-latest  # Use the latest Ubuntu environment
+    runs-on: ubuntu-latest
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4  # Checkout the repository code
+      uses: actions/checkout@v4
 
-    - name: Get release notes via curl
+    - name: Run Go Changelog Generator
       run: |
-        # Use curl to fetch the release body from GitHub API
-        curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-        https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ github.event.release.tag_name }} \
-        | jq -r '.body' > release_notes.txt
-
-    - name: Debug release info
-      run: |
-        echo "Release tag: ${{ github.event.release.tag_name }}"
-        echo "Release body:"
-        cat release_notes.txt  # Output the fetched release notes for debugging
-
-    - name: Prepend release notes to CHANGELOG.md and clean up
-      run: |
-        # If CHANGELOG.md does not exist, create an empty one
-        if [ ! -f CHANGELOG.md ]; then
-          touch CHANGELOG.md
+        # Run the Go changelog generator, pass the release tag if available
+        if [ "${{ github.event.release.tag_name }}" = "latest" ]; then
+          go run tools/changelog.go > "${{ github.event.release.tag_name }}-changelog.md"
+        else
+          go run tools/changelog.go "${{ github.event.release.tag_name }}" > "${{ github.event.release.tag_name }}-changelog.md"
         fi
 
-        # Write the new release notes into a temporary file 'new_changelog.md'
-        echo "## ${{ github.event.release.tag_name }} - $(date '+%Y-%m-%d')" > new_changelog.md
-        echo "" >> new_changelog.md
-        cat release_notes.txt >> new_changelog.md
-        echo "" >> new_changelog.md
+    - name: Handle changelog files
+      run: |
+        # Remove the 'v' prefix from the tag name
+        TAG_NAME=${{ github.event.release.tag_name }}
+        NAME_WITHOUT_V=$(echo "$TAG_NAME" | sed 's/^v//')
 
-        # Append the current CHANGELOG.md content to the temporary file
-        cat CHANGELOG.md >> new_changelog.md
+        # Create the CHANGELOG directory if it doesn't exist
+        mkdir -p CHANGELOG
 
-        # Replace the original CHANGELOG.md with the updated one
-        mv new_changelog.md CHANGELOG.md
+        # Define the new changelog file path
+        NEW_CHANGELOG_PATH="CHANGELOG/CHANGELOG-$NAME_WITHOUT_V.md"
 
-        # Delete the release notes temporary file
-        rm release_notes.txt
+        # Check if the changelog file for the current release already exists
+        if [ -f "$NEW_CHANGELOG_PATH" ]; then
+          # If the file exists, append the current content to the temporary changelog
+          cat "$NEW_CHANGELOG_PATH" >> "${TAG_NAME}-changelog.md"
+          # Overwrite the existing changelog with the updated content
+          mv "${TAG_NAME}-changelog.md" "$NEW_CHANGELOG_PATH"
+        else
+          # If it doesn't exist, rename the temp changelog to the new changelog file
+          mv "${TAG_NAME}-changelog.md" "$NEW_CHANGELOG_PATH"
+        fi
+
+    - name: Clean up
+      run: |
+        # Remove any temporary files that were created during the process
+        rm -f "${{ github.event.release.tag_name }}-changelog.md"
 
     - name: Create Pull Request
       uses: peter-evans/create-pull-request@v7.0.5
       with:
         token: ${{ secrets.GITHUB_TOKEN }}  # Use the repository token to authenticate
-        commit-message: "Update CHANGELOG.md for release ${{ github.event.release.tag_name }}"  # Commit message for the PR
+        commit-message: "Update CHANGELOG for release ${{ github.event.release.tag_name }}"  # Commit message for the PR
         title: "Update CHANGELOG for release ${{ github.event.release.tag_name }}"  # Title of the PR
-        body: "This PR updates the CHANGELOG.md with the notes for release ${{ github.event.release.tag_name }}"  # Description of the PR
-        base: main  # Target the 'main' branch for the PR
-        delete-branch: true  # Delete the branch after the PR is merged
+        body: "This PR updates the CHANGELOG files for release ${{ github.event.release.tag_name }}"  # Description of the PR
+        base: main 
+        delete-branch: true
         labels: changelog  # Add a label to the PR
