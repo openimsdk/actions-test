@@ -58,7 +58,7 @@ func (g *GitHubRepo) classifyReleaseNotes(body string) map[string][]string {
 			matches := regexp.MustCompile(`\*\*Full Changelog\*\*: (https://github\.com/[^\s]+/compare/([^\s]+))`).FindStringSubmatch(line)
 			if len(matches) > 2 {
 				// Format the Full Changelog link with title
-				g.FullChangelog = fmt.Sprintf("[v%s](%s)", matches[2], matches[1])
+				g.FullChangelog = fmt.Sprintf("[%s](%s)", matches[2], matches[1])
 			}
 			continue // Skip further processing for this line.
 		}
@@ -107,7 +107,7 @@ func (g *GitHubRepo) generateChangelog(tag, date, htmlURL, body string) string {
 	formattedDate := date[:10]
 
 	// Changelog header with tag, date, and links.
-	changelog := fmt.Sprintf("## [%s](%s) %s\n\n", tag, htmlURL, formattedDate)
+	changelog := fmt.Sprintf("## [%s](%s) \t%s\n\n", tag, htmlURL, formattedDate)
 
 	if len(sections["feat"]) > 0 {
 		changelog += "### New Features\n" + strings.Join(sections["feat"], "\n") + "\n\n"
