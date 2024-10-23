@@ -49,11 +49,13 @@ jobs:
             echo -e "# CHANGELOGs\n" > CHANGELOG/README.md
           fi
           
-          # Add the new changelog entry at the top of the README.md
-          if ! grep -q "\[$CHANGELOG_FILENAME\]" CHANGELOG/README.md; then
+            # Add the new changelog entry at the top of the README.md
+            if ! grep -q "\[$CHANGELOG_FILENAME\]" CHANGELOG/README.md; then
             sed -i "3i- [$CHANGELOG_FILENAME](./$CHANGELOG_FILENAME)" CHANGELOG/README.md
+            # Remove the extra newline character added by sed
+            sed -i '4s/^\n//' CHANGELOG/README.md
+            fi
           fi
-        fi
 
     - name: Clean up
       run: |
