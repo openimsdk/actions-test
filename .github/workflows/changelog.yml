@@ -26,6 +26,9 @@ jobs:
 
     - name: Handle changelog files
       run: |
+        # Ensure that the CHANGELOG directory exists
+        mkdir -p CHANGELOG
+
         # Extract Major.Minor version by removing the 'v' prefix from the tag name
         TAG_NAME=${{ github.event.release.tag_name }}
         CHANGELOG_VERSION_NUMBER=$(echo "$TAG_NAME" | sed 's/^v//' | grep -oP '^\d+\.\d+')
