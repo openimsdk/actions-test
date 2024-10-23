@@ -107,7 +107,7 @@ func (g *GitHubRepo) generateChangelog(tag, date, htmlURL, body string) string {
 	formattedDate := date[:10]
 
 	// Changelog header with tag, date, and links.
-	changelog := fmt.Sprintf("## [%s](%s) \t%s\n\n", tag, htmlURL, formattedDate)
+	changelog := fmt.Sprintf("## [%s](%s) \t(%s)\n\n", tag, htmlURL, formattedDate)
 
 	if len(sections["feat"]) > 0 {
 		changelog += "### New Features\n" + strings.Join(sections["feat"], "\n") + "\n\n"
