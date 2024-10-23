@@ -53,7 +53,7 @@ jobs:
             if ! grep -q "\[$CHANGELOG_FILENAME\]" CHANGELOG/README.md; then
             sed -i "3i- [$CHANGELOG_FILENAME](./$CHANGELOG_FILENAME)" CHANGELOG/README.md
             # Remove the extra newline character added by sed
-            sed -i '4s/^\n//' CHANGELOG/README.md
+            sed -i '4d' CHANGELOG/README.md
             fi
           fi
 
