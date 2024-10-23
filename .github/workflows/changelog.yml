@@ -49,7 +49,7 @@ jobs:
 
           # Ensure that README.md exists
           if [ ! -f "CHANGELOG/README.md" ]; then
-            echo -e "# CHANGELOGs\n" > CHANGELOG/README.md
+            echo -e "# CHANGELOGs\n\n" > CHANGELOG/README.md
           fi
           
             # Add the new changelog entry at the top of the README.md
