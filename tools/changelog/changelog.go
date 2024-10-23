@@ -11,7 +11,7 @@ import (
 )
 
 // You can specify a tag as a command line argument to generate the changelog for a specific version.
-// Example: go run tools/changelog.go v0.0.33
+// Example: go run tools/changelog/changelog.go v0.0.33
 // If no tag is provided, the latest release will be used.
 
 // Setting repo owner and repo name by generate changelog
@@ -46,16 +46,16 @@ func (g *GitHubRepo) classifyReleaseNotes(body string) map[string][]string {
 		"other":    {},
 	}
 
-	// Regular expression to extract PR number and URL
-	rePR := regexp.MustCompile(`in (https://github\.com/[^\s]+/pull/(\d+))`)
+	// Regular expression to extract PR number and URL (case insensitive)
+	rePR := regexp.MustCompile(`(?i)in (https://github\.com/[^\s]+/pull/(\d+))`)
 
 	// Split the body into individual lines.
 	lines := strings.Split(body, "\n")
 
 	for _, line := range lines {
-		// Use a regular expression to extract Full Changelog link and its title.
-		if strings.Contains(line, "**Full Changelog**") {
-			matches := regexp.MustCompile(`\*\*Full Changelog\*\*: (https://github\.com/[^\s]+/compare/([^\s]+))`).FindStringSubmatch(line)
+		// Use a regular expression to extract Full Changelog link and its title (case insensitive).
+		if strings.Contains(strings.ToLower(line), "**full changelog**") {
+			matches := regexp.MustCompile(`(?i)\*\*full changelog\*\*: (https://github\.com/[^\s]+/compare/([^\s]+))`).FindStringSubmatch(line)
 			if len(matches) > 2 {
 				// Format the Full Changelog link with title
 				g.FullChangelog = fmt.Sprintf("[%s](%s)", matches[2], matches[1])
@@ -66,27 +66,30 @@ func (g *GitHubRepo) classifyReleaseNotes(body string) map[string][]string {
 		if strings.HasPrefix(line, "*") {
 			var category string
 
-			// Determine the category based on the prefix.
-			if strings.HasPrefix(line, "* feat") {
+			// Use strings.ToLower to make the matching case insensitive
+			lowerLine := strings.ToLower(line)
+
+			// Determine the category based on the prefix (case insensitive).
+			if strings.HasPrefix(lowerLine, "* feat") {
 				category = "feat"
-			} else if strings.HasPrefix(line, "* fix") {
+			} else if strings.HasPrefix(lowerLine, "* fix") {
 				category = "fix"
-			} else if strings.HasPrefix(line, "* chore") {
+			} else if strings.HasPrefix(lowerLine, "* chore") {
 				category = "chore"
-			} else if strings.HasPrefix(line, "* refactor") {
+			} else if strings.HasPrefix(lowerLine, "* refactor") {
 				category = "refactor"
-			} else if strings.HasPrefix(line, "* build") {
+			} else if strings.HasPrefix(lowerLine, "* build") {
 				category = "build"
 			} else {
 				category = "other"
 			}
 
-			// Extract PR number and URL
+			// Extract PR number and URL (case insensitive)
 			matches := rePR.FindStringSubmatch(line)
 			if len(matches) == 3 {
 				prURL := matches[1]
 				prNumber := matches[2]
-				// Format the line with the PR link
+				// Format the line with the PR link and use original content for the final result
 				formattedLine := fmt.Sprintf("* %s [#%s](%s)", strings.Split(line, " by ")[0][2:], prNumber, prURL)
 				result[category] = append(result[category], formattedLine)
 			} else {
