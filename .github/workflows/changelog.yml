@@ -19,9 +19,9 @@ jobs:
       run: |
         # Run the Go changelog generator, passing the release tag if available
         if [ "${{ github.event.release.tag_name }}" = "latest" ]; then
-          go run tools/changelog.go > "${{ github.event.release.tag_name }}-changelog.md"
+          go run tools/changelog/changelog.go > "${{ github.event.release.tag_name }}-changelog.md"
         else
-          go run tools/changelog.go "${{ github.event.release.tag_name }}" > "${{ github.event.release.tag_name }}-changelog.md"
+          go run tools/changelog/changelog.go "${{ github.event.release.tag_name }}" > "${{ github.event.release.tag_name }}-changelog.md"
         fi
 
     - name: Handle changelog files
