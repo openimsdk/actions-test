@@ -51,7 +51,7 @@ jobs:
           
           # Add the new changelog entry at the top of the README.md
           if ! grep -q "\[$CHANGELOG_FILENAME\]" CHANGELOG/README.md; then
-            sed -i "2i- [$CHANGELOG_FILENAME](./$CHANGELOG_FILENAME)" CHANGELOG/README.md
+            sed -i "3i- [$CHANGELOG_FILENAME](./$CHANGELOG_FILENAME)" CHANGELOG/README.md
           fi
         fi
 
