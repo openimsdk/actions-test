@@ -1,3 +1,12 @@
+## [v0.1.2](https://github.com/openimsdk/actions-test/releases/tag/v0.1.2) 2024-10-23
+
+### Others
+* Update CHANGELOG for release v0.0.50 [#86](https://github.com/openimsdk/actions-test/pull/86)
+* Update CHANGELOG for release v0.1.1 [#88](https://github.com/openimsdk/actions-test/pull/88)
+* Update CHANGELOG for release v1.0.0 [#89](https://github.com/openimsdk/actions-test/pull/89)
+
+**Full Changelog**: [vv0.0.50...v0.1.2](https://github.com/openimsdk/actions-test/compare/v0.0.50...v0.1.2)
+
 ## [v0.1.1](https://github.com/openimsdk/actions-test/releases/tag/v0.1.1) 2024-10-23
 
 ### New Features
