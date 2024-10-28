@@ -9,16 +9,13 @@ on:
   workflow_dispatch:
     inputs:
       milestone_name:
-        description: 'Milestone name to collect closed PRs from'
+        description: "Milestone name to collect closed PRs from"
         required: true
-        default: 'v3.8.2'
+        default: "v3.8.2"
       target_branch:
-        description: 'Target branch to merge the consolidated PR'
+        description: "Target branch to merge the consolidated PR"
         required: true
-        default: 'pre-release-v3.8.2'
-
-  schedule:
-    - cron: '0 2 * * 0'
+        default: "pre-release-v3.8.2"
 
 env:
   MILESTONE_NAME: ${{ github.event.inputs.milestone_name || 'v3.8.2' }}
@@ -26,7 +23,7 @@ env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
   LABEL_NAME: cherry-picked
-  TEMP_DIR: /tmp  # Using /tmp as the temporary directory
+  TEMP_DIR: /tmp # Using /tmp as the temporary directory
 
 jobs:
   cherry_pick_milestone_prs:
@@ -123,7 +120,7 @@ jobs:
             short_commit_hash=$(echo "$merge_commit" | cut -c 1-7)
 
             # Append PR details to the body
-            echo "- $pr_title: (#$pr_number) ($short_commit_hash)" >> ${{ env.TEMP_DIR }}/pr_body.txt
+            echo "- $pr_title (#$pr_number) ($short_commit_hash)" >> ${{ env.TEMP_DIR }}/pr_body.txt
 
             if [ "$merge_commit" != "null" ];then
               echo "$merge_commit" >> ${{ env.TEMP_DIR }}/commit_hashes.txt
