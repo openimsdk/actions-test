@@ -1,4 +1,4 @@
-name: Cleanup After Milestone PRs Merged
+name: Cleanup After Milestone PRs Merged(Deprecated)
 
 on:
   pull_request:

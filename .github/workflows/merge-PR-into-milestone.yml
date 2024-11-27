@@ -18,8 +18,8 @@ on:
         default: "pre-release-v3.8.3"
 
 env:
-  MILESTONE_NAME: ${{ github.event.inputs.milestone_name || 'v3.8.2' }}
-  TARGET_BRANCH: ${{ github.event.inputs.target_branch || 'pre-release-v3.8.2' }}
+  MILESTONE_NAME: ${{ github.event.inputs.milestone_name || 'v3.8.3' }}
+  TARGET_BRANCH: ${{ github.event.inputs.target_branch || 'pre-release-v3.8.3' }}
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
   LABEL_NAME: cherry-picked
@@ -109,8 +109,8 @@ jobs:
               git remote set-url origin "https://${BOT_TOKEN}@github.com/${{ github.repository }}.git"
               git push origin $cherry_pick_branch --force
 
-              new_pr_title="$pr_title (by @$pr_creator from #$pr_number)"
-              new_pr_body="$pr_body\n\nThis PR cherry-picks commit from original PR #$pr_number."
+              new_pr_title="$pr_title [Created by @$pr_creator from #$pr_number]"
+              new_pr_body="$pr_body  \\n >This PR cherry-picks commit from original PR #$pr_number."
 
               response=$(curl -s -X POST -H "Authorization: token $BOT_TOKEN" \
                 -H "Accept: application/vnd.github+json" \
