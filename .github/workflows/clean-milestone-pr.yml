@@ -20,21 +20,22 @@ jobs:
         PR_TITLE="${{ github.event.pull_request.title }}"
 
         echo "PR Title: $PR_TITLE"
-
+        
         # Extract PR numbers from the title
         PR_NUMBERS=$(echo "$PR_TITLE" | grep -oE "#[0-9]+" | tr -d '#' | tr '\n' ' ')
         echo "Extracted PR Numbers: $PR_NUMBERS"
-
+        
         # Save PR numbers to a file
         echo "$PR_NUMBERS" > pr_numbers.txt
         echo "Saved PR Numbers to pr_numbers.txt"
-
+        
         # Check if the title matches the specific pattern
         if echo "$PR_TITLE" | grep -qE "\[Created by @.+ from #[0-9]+\]$"; then
           echo "proceed=true" >> $GITHUB_OUTPUT
         else
           echo "proceed=false" >> $GITHUB_OUTPUT
         fi
+      shell: /usr/bin/bash -e {0}
 
     - name: Use extracted PR numbers and label PRs
       if: (steps.extract_pr_numbers.outputs.proceed == 'true' || contains(github.event.pull_request.labels.*.name, 'milestone-merge')) && github.event.pull_request.merged == true
