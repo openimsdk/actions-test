@@ -1,4 +1,4 @@
-name: Single PR for Closed Milestone PRs
+name: Merge for Closed Milestone PRs
 
 on:
   workflow_dispatch:  # Manual trigger
@@ -14,9 +14,6 @@ on:
   schedule:
     - cron: '0 0 * * 0'  # Scheduled to run every Sunday at 00:00 UTC
 
-env:
-  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
 jobs:
   cherry_pick_closed_milestone_prs:
     runs-on: ubuntu-latest
@@ -31,25 +28,19 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-      # Step 3: Install GitHub CLI to interact with milestones and PRs
-      - name: Install GitHub CLI
-        run: sudo apt install gh
-
-      # Step 4: Authenticate GitHub CLI using GITHUB_TOKEN
-      - name: Authenticate GitHub CLI
-        run: echo "${{ env.GITHUB_TOKEN }}" | gh auth login --with-token
-
-      # Step 5: Fetch closed PRs from the specified milestone
+      # Step 3: Fetch closed PRs from the specified milestone using GitHub API
       - name: Fetch Closed PRs from Milestone
         id: fetch_prs
         run: |
           milestone="${{ github.event.inputs.milestone }}"
-          prs=$(gh pr list --search "milestone:$milestone is:closed" --json number,headRefName,mergeCommit)
-          echo "::set-output name=prs::$prs"
+          prs=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/${{ github.repository }}/pulls?state=closed&milestone=$milestone")
+          echo "$prs" | jq -r '.[] | select(.merged_at != null) | {number: .number, headRefName: .head.ref, mergeCommit: .merge_commit_sha}' > closed_prs.json
 
-      # Step 6: Create a new branch from main, cherry-pick PRs, and push to remote
+      # Step 4: Create a new branch from main, cherry-pick PRs, and push to remote
       - name: Create and Cherry-pick Branch
-        if: ${{ steps.fetch_prs.outputs.prs != '[]' }}
+        if: ${{ steps.fetch_prs.outputs.prs }} != "[]"
         run: |
           target_branch="${{ github.event.inputs.target_branch }}"
           cherry_pick_branch="milestone-cherry-pick-$(date +%Y%m%d%H%M%S)"
@@ -60,8 +51,8 @@ jobs:
           git checkout -b $cherry_pick_branch
 
           # Iterate over closed PRs in the milestone and cherry-pick each merge commit
-          echo "${{ steps.fetch_prs.outputs.prs }}" | jq -c '.[]' | while read -r pr; do
-            pr_number=$(echo "$pr" | jq '.number')
+          jq -c '.[]' closed_prs.json | while read -r pr; do
+            pr_number=$(echo "$pr" | jq -r '.number')
             merge_commit=$(echo "$pr" | jq -r '.mergeCommit')
 
             if [ "$merge_commit" != "null" ]; then
@@ -80,7 +71,7 @@ jobs:
           # Push the cherry-pick branch to the remote repository
           git push origin $cherry_pick_branch
 
-      # Step 7: Create a single pull request to merge the cherry-pick branch into the target branch
+      # Step 5: Create a single pull request to merge the cherry-pick branch into the target branch
       - name: Create Pull Request to Target Branch
         if: steps.fetch_prs.outputs.prs != "[]"
         uses: peter-evans/create-pull-request@v4
