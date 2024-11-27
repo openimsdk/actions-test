@@ -95,6 +95,7 @@ jobs:
               "https://api.github.com/repos/${{ github.repository }}/pulls/$pr_number")
             pr_title=$(echo "$pr_details" | jq -r '.title')
             pr_body=$(echo "$pr_details" | jq -r '.body')
+            pr_creator=$(echo "$pr_details" | jq -r '.user.login')
             merge_commit=$(echo "$pr_details" | jq -r '.merge_commit_sha')
             short_commit_hash=$(echo "$merge_commit" | cut -c 1-7)
 
@@ -108,13 +109,16 @@ jobs:
               git remote set-url origin "https://${BOT_TOKEN}@github.com/${{ github.repository }}.git"
               git push origin $cherry_pick_branch --force
 
+              new_pr_title="$pr_title (by @$pr_creator from #$pr_number)"
+              new_pr_body="$pr_body\n\nThis PR cherry-picks commit from original PR #$pr_number."
+
               response=$(curl -s -X POST -H "Authorization: token $BOT_TOKEN" \
                 -H "Accept: application/vnd.github+json" \
                 https://api.github.com/repos/${{ github.repository }}/pulls \
-                -d "$(jq -n --arg title "$pr_title" \
+                -d "$(jq -n --arg title "$new_pr_title" \
                   --arg head "$cherry_pick_branch" \
                   --arg base "$TARGET_BRANCH" \
-                  --arg body "$pr_body" \
+                  --arg body "$new_pr_body" \
                   '{title: $title, head: $head, base: $base, body: $body}')")
 
               new_pr_number=$(echo "$response" | jq -r '.number')
