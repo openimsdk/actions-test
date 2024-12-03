@@ -11,7 +11,7 @@ on:
       tag:
         description: "Tag version to be used for Docker image"
         required: true
-        default: "v3.8.0"
+        default: "v3.8.3"
 
 jobs:
   build-and-push:
@@ -55,7 +55,6 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern=v{{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
             type=semver,pattern=release-{{raw}}
             type=sha
             type=raw,value=${{ github.event.inputs.tag }}
