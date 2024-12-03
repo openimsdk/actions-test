@@ -84,7 +84,8 @@ jobs:
         run: |
           ROOT_DIR="build/images"
           for dir in "$ROOT_DIR"/*/; do
-              if [ -f "$dir/Dockerfile" ]; then
+              Dockerfile=$(ls "$dir" | grep -i '\.dockerfile$' | head -n 1)
+              if [ -f "$dir/$Dockerfile" ]; then
                   IMAGE_NAME=$(basename "$dir")
                   echo "Building Docker image for $IMAGE_NAME with tags ${{ steps.meta.outputs.tags }}..."
                   docker buildx build --platform linux/amd64,linux/arm64 \
@@ -93,6 +94,6 @@ jobs:
                     --tag registry.cn-hangzhou.aliyuncs.com/openimsdk/$IMAGE_NAME:${{ steps.meta.outputs.tags }} \
                     --push "$dir"
               else
-                  echo "No Dockerfile found in $dir"
+                  echo "No .dockerfile found in $dir"
               fi
           done
