@@ -16,9 +16,7 @@ on:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        image: [image1, image2, image3]
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
