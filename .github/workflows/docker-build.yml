@@ -83,17 +83,22 @@ jobs:
       - name: Build and push Docker images
         run: |
           ROOT_DIR="build/images"
-          for dir in "$ROOT_DIR"/*/; do
-              Dockerfile=$(ls "$dir" | grep -iE '(^dockerfile$|\.dockerfile$)' | head -n 1)
-              if [ -f "$dir/$Dockerfile" ]; then
-                  IMAGE_NAME=$(basename "$dir")
-                  echo "Building Docker image for $IMAGE_NAME with tags ${{ steps.meta.outputs.tags }}..."
-                  docker buildx build --platform linux/amd64,linux/arm64 \
-                    --tag ${{ secrets.DOCKER_USERNAME }}/$IMAGE_NAME:${{ steps.meta.outputs.tags }} \
-                    --tag ghcr.io/${{ github.repository_owner }}/$IMAGE_NAME:${{ steps.meta.outputs.tags }} \
-                    --tag registry.cn-hangzhou.aliyuncs.com/openimsdk/$IMAGE_NAME:${{ steps.meta.outputs.tags }} \
-                    --push "$dir"
-              else
-                  echo "No .dockerfile found in $dir"
-              fi
-          done
+          while IFS= read -r tag; do
+              for dir in "$ROOT_DIR"/*/; do
+                  # Find Dockerfile or *.dockerfile in a case-insensitive manner
+                  dockerfile=$(find "$dir" -maxdepth 1 -type f \( -iname 'dockerfile' -o -iname '*.dockerfile' \) | head -n 1)
+                  
+                  if [ -n "$dockerfile" ] && [ -f "$dockerfile" ]; then
+                      IMAGE_NAME=$(basename "$dir")
+                      echo "Building Docker image for $IMAGE_NAME with tag $tag..."
+                      docker buildx build --platform linux/amd64,linux/arm64 \
+                        --file "$dockerfile" \
+                        --tag ${{ secrets.DOCKER_USERNAME }}/$IMAGE_NAME:"$tag" \
+                        --tag ghcr.io/${{ github.repository_owner }}/$IMAGE_NAME:"$tag" \
+                        --tag registry.cn-hangzhou.aliyuncs.com/openimsdk/$IMAGE_NAME:"$tag" \
+                        --push "$dir"
+                  else
+                      echo "No valid Dockerfile found in $dir"
+                  fi
+              done
+          done <<< "${{ steps.meta.outputs.tags }}"
