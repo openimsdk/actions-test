@@ -17,7 +17,7 @@ jobs:
   find-images:
     runs-on: ubuntu-latest
     outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      matrix: ${{ steps.find.outputs.matrix }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -25,8 +25,12 @@ jobs:
       - name: Find Docker image directories
         id: find
         run: |
-          images=$(find build/images -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | jq -R . | jq -s '{image: .}' | jq -c .)
-          echo "matrix=$images" >> $GITHUB_OUTPUT
+          images=$(find build/images -mindepth 1 -maxdepth 1 -type d -printf "%f\n")
+          
+          images_json=$(echo "$images" | jq -R . | jq -s '{image: .}')
+          
+          echo "matrix=$images_json" >> $GITHUB_OUTPUT
+      
 
   build-and-push:
     needs: find-images
