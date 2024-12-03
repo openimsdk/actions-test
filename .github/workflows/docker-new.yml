@@ -11,13 +11,13 @@ on:
       tag:
         description: "Tag version to be used for Docker image"
         required: true
-        default: "v3.8.0"
+        default: "v3.8.3"
 
 jobs:
   find-images:
     runs-on: ubuntu-latest
     outputs:
-      matrix: ${{ steps.find.outputs.matrix }}
+      images: ${{ steps.find.outputs.images }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -25,17 +25,15 @@ jobs:
       - name: Find Docker image directories
         id: find
         run: |
-          images=$(find build/images -mindepth 1 -maxdepth 1 -type d -printf "%f\n")
-          
-          images_json=$(echo "$images" | jq -R . | jq -s '{ include: [ .[] | { image: . } ] }')
-          
-          echo "matrix=$images_json" >> $GITHUB_OUTPUT
+          images=$(find build/images -mindepth 1 -maxdepth 1 -type d -printf "%f," | sed 's/,$//')
+          echo "images=$images" >> $GITHUB_OUTPUT
 
   build-and-push:
     needs: find-images
     runs-on: ubuntu-latest
     strategy:
-      matrix: ${{ fromJson(needs.find-images.outputs.matrix) }}
+      matrix:
+        image: ${{ fromJson('["' + needs.find-images.outputs.images.replace(',', '","') + '"]') }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -47,8 +45,9 @@ jobs:
         uses: actions/cache@v3
         with:
           path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          key: ${{ runner.os }}-buildx-${{ github.sha }}-${{ matrix.image }}
           restore-keys: |
+            ${{ runner.os }}-buildx-${{ github.sha }}-${{ matrix.image }}
             ${{ runner.os }}-buildx-
 
       - name: Log in to Docker Hub
@@ -81,28 +80,24 @@ jobs:
             type=ref,event=branch
             type=semver,pattern={{version}}
             type=semver,pattern=v{{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
+            # type=semver,pattern={{major}}.{{minor}}
+            # type=semver,pattern={{major}}
             type=semver,pattern=release-{{raw}}
             type=sha
             type=raw,value=${{ github.event.inputs.tag }}
-
-      - name: Display tags for debugging
-        run: echo "${{ steps.meta.outputs.tags }}"
 
       - name: Build and push Docker image
         run: |
           ROOT_DIR="build/images"
           IMAGE_NAME=${{ matrix.image }}
           dir="$ROOT_DIR/$IMAGE_NAME"
-
+          
           dockerfile=$(find "$dir" -maxdepth 1 -type f \( -iname 'dockerfile' -o -iname '*.dockerfile' \) | head -n 1)
           
           if [ -n "$dockerfile" ] && [ -f "$dockerfile" ]; then
               echo "Building Docker image for $IMAGE_NAME with tags:"
               
               tag_args=()
-
               while IFS= read -r tag; do
                   tag_args+=(--tag "${{ secrets.DOCKER_USERNAME }}/$IMAGE_NAME:$tag")
                   tag_args+=(--tag "ghcr.io/${{ github.repository_owner }}/$IMAGE_NAME:$tag")
