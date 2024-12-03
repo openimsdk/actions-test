@@ -1,4 +1,4 @@
-name: Build and release multiple Docker Images
+name: Build and Push Docker Images
 
 on:
   push:
@@ -25,12 +25,8 @@ jobs:
       - name: Find Docker image directories
         id: find
         run: |
-          images=$(find build/images -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | jq -R . | jq -s '{image: .}')
+          images=$(find build/images -mindepth 1 -maxdepth 1 -type d -printf "%f\n" | jq -R . | jq -s '{image: .}' | jq -c .)
           echo "matrix=$images" >> $GITHUB_OUTPUT
-
-      - name: Set matrix
-        id: set-matrix
-        run: echo "matrix=${{ steps.find.outputs.matrix }}" >> $GITHUB_OUTPUT
 
   build-and-push:
     needs: find-images
