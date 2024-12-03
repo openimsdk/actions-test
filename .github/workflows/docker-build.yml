@@ -84,7 +84,7 @@ jobs:
         run: |
           ROOT_DIR="build/images"
           for dir in "$ROOT_DIR"/*/; do
-              Dockerfile=$(ls "$dir" | grep -i '\.dockerfile$' | head -n 1)
+              Dockerfile=$(ls "$dir" | grep -iE '(^dockerfile$|\.dockerfile$)' | head -n 1)
               if [ -f "$dir/$Dockerfile" ]; then
                   IMAGE_NAME=$(basename "$dir")
                   echo "Building Docker image for $IMAGE_NAME with tags ${{ steps.meta.outputs.tags }}..."
