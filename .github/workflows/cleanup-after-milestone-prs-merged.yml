@@ -1,4 +1,4 @@
-name: Cleanup After Milestone PRs Merged(Deprecated)
+name: Cleanup After Milestone PRs Merged
 
 on:
   pull_request:
@@ -21,10 +21,8 @@ jobs:
 
         echo "PR Title: $PR_TITLE"
 
-        PR_TITLE_ESCAPED=$(echo "$PR_TITLE" | sed 's/`/\\`/g')
-
         # Extract PR numbers from the title
-        PR_NUMBERS=$(echo "$PR_TITLE_ESCAPED" | grep -oE "#[0-9]+" | tr -d '#' | tr '\n' ' ')
+        PR_NUMBERS=$(echo "$PR_TITLE" | grep -oE "#[0-9]+" | tr -d '#' | tr '\n' ' ')
         echo "Extracted PR Numbers: $PR_NUMBERS"
 
         # Save PR numbers to a file
