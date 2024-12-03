@@ -83,22 +83,30 @@ jobs:
       - name: Build and push Docker images
         run: |
           ROOT_DIR="build/images"
-          while IFS= read -r tag; do
-              for dir in "$ROOT_DIR"/*/; do
-                  # Find Dockerfile or *.dockerfile in a case-insensitive manner
-                  dockerfile=$(find "$dir" -maxdepth 1 -type f \( -iname 'dockerfile' -o -iname '*.dockerfile' \) | head -n 1)
+          for dir in "$ROOT_DIR"/*/; do
+              # Find Dockerfile or *.dockerfile in a case-insensitive manner
+              dockerfile=$(find "$dir" -maxdepth 1 -type f \( -iname 'dockerfile' -o -iname '*.dockerfile' \) | head -n 1)
+              
+              if [ -n "$dockerfile" ] && [ -f "$dockerfile" ]; then
+                  IMAGE_NAME=$(basename "$dir")
+                  echo "Building Docker image for $IMAGE_NAME with tags:"
                   
-                  if [ -n "$dockerfile" ] && [ -f "$dockerfile" ]; then
-                      IMAGE_NAME=$(basename "$dir")
-                      echo "Building Docker image for $IMAGE_NAME with tag $tag..."
-                      docker buildx build --platform linux/amd64,linux/arm64 \
-                        --file "$dockerfile" \
-                        --tag ${{ secrets.DOCKER_USERNAME }}/$IMAGE_NAME:"$tag" \
-                        --tag ghcr.io/${{ github.repository_owner }}/$IMAGE_NAME:"$tag" \
-                        --tag registry.cn-hangzhou.aliyuncs.com/openimsdk/$IMAGE_NAME:"$tag" \
-                        --push "$dir"
-                  else
-                      echo "No valid Dockerfile found in $dir"
-                  fi
-              done
-          done <<< "${{ steps.meta.outputs.tags }}"
+                  # Initialize tag arguments
+                  tag_args=()
+  
+                  # Read each tag and append --tag arguments
+                  while IFS= read -r tag; do
+                      tag_args+=(--tag "${{ secrets.DOCKER_USERNAME }}/$IMAGE_NAME:$tag")
+                      tag_args+=(--tag "ghcr.io/${{ github.repository_owner }}/$IMAGE_NAME:$tag")
+                      tag_args+=(--tag "registry.cn-hangzhou.aliyuncs.com/openimsdk/$IMAGE_NAME:$tag")
+                  done <<< "${{ steps.meta.outputs.tags }}"
+  
+                  # Build and push the Docker image with all tags
+                  docker buildx build --platform linux/amd64,linux/arm64 \
+                    --file "$dockerfile" \
+                    "${tag_args[@]}" \
+                    --push "$dir"
+              else
+                  echo "No valid Dockerfile found in $dir"
+              fi
+          done
