@@ -27,10 +27,9 @@ jobs:
         run: |
           images=$(find build/images -mindepth 1 -maxdepth 1 -type d -printf "%f\n")
           
-          images_json=$(echo "$images" | jq -R . | jq -s '{image: .}')
+          images_json=$(echo "$images" | jq -R . | jq -s '{ include: [ .[] | { image: . } ] }')
           
           echo "matrix=$images_json" >> $GITHUB_OUTPUT
-      
 
   build-and-push:
     needs: find-images
@@ -71,26 +70,6 @@ jobs:
           registry: registry.cn-hangzhou.aliyuncs.com
           username: ${{ secrets.ALIREGISTRY_USERNAME }}
           password: ${{ secrets.ALIREGISTRY_TOKEN }}
-
-      # - name: Extract version from tag
-      #   if: github.event_name == 'release'
-      #   id: extract_version_release
-      #   run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
-
-      # - name: Set version from workflow_dispatch input
-      #   if: github.event_name == 'workflow_dispatch'
-      #   id: extract_version_dispatch
-      #   run: echo "version=${{ github.event.inputs.tag }}" >> $GITHUB_ENV
-
-      # - name: Set version from branch name
-      #   if: github.event_name == 'push'
-      #   id: extract_version_push
-      #   run: |
-      #     if [[ "${GITHUB_REF}" == refs/heads/release-* ]]; then
-      #       BRANCH_NAME=${GITHUB_REF#refs/heads/}
-      #       VERSION=${BRANCH_NAME#release-}
-      #       echo "version=$VERSION" >> $GITHUB_ENV
-      #     fi
 
       - name: Extract metadata for Docker (tags, labels)
         id: meta
