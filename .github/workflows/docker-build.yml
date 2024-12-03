@@ -46,17 +46,17 @@ jobs:
 
       - name: Extract version from tag
         if: github.event_name == 'release'
-        id: extract_version
+        id: extract_version_release
         run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
 
       - name: Set version from workflow_dispatch input
         if: github.event_name == 'workflow_dispatch'
-        id: extract_version
+        id: extract_version_dispatch
         run: echo "version=${{ github.event.inputs.tag }}" >> $GITHUB_ENV
 
       - name: Set version from branch name
         if: github.event_name == 'push'
-        id: extract_version
+        id: extract_version_push
         run: |
           if [[ "${GITHUB_REF}" == refs/heads/release-* ]]; then
             BRANCH_NAME=${GITHUB_REF#refs/heads/}
