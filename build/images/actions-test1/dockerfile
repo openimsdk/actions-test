@@ -1,2 +1,15 @@
-FROM alpine:latest
+# FROM alpine:latest
+FROM golang:1.23.2-alpine AS builder
+
+ENV SERVER_DIR=/openim-server
+
+# Set the working directory inside the container based on the environment variable
+WORKDIR $SERVER_DIR
+
+
+# Copy all files from the current directory into the container
+COPY . .
+
+RUN go mod tidy
+
 CMD ["echo", "Hello, World!"]
