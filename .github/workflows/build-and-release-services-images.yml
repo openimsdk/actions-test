@@ -85,15 +85,19 @@ jobs:
                     --file "$dockerfile" \
                     "${tag_args[@]}" \
                     --push \
-                    "."
-
-                  # Verify the multi-platform support
-                  for tag in "${{ steps.meta.outputs.tags }}"; do
-                      docker manifest inspect "${{ secrets.DOCKER_USERNAME }}/$IMAGE_NAME:$tag"
-                      docker manifest inspect "ghcr.io/${{ github.repository_owner }}/$IMAGE_NAME:$tag"
-                      docker manifest inspect "registry.cn-hangzhou.aliyuncs.com/openimsdk/$IMAGE_NAME:$tag"
-                  done
+                    "."      
+                    
               else
                   echo "No valid Dockerfile found in $dir"
               fi
+          done
+      - name: Verify multi-platform support
+        run: |
+          for dir in build/images/*/; do
+              IMAGE_NAME=$(basename "$dir" | tr '[:upper:]' '[:lower:]')
+              for tag in $(echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n'); do
+                  docker manifest inspect "${{ secrets.DOCKER_USERNAME }}/$IMAGE_NAME:$tag"
+                  docker manifest inspect "ghcr.io/${{ github.repository_owner }}/$IMAGE_NAME:$tag"
+                  docker manifest inspect "registry.cn-hangzhou.aliyuncs.com/openimsdk/$IMAGE_NAME:$tag"
+              done
           done
