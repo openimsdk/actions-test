@@ -103,10 +103,10 @@ jobs:
                   fi
                   amd64_found=$(echo "$manifest" | jq '.manifests[] | select(.platform.architecture == "amd64")')
                   if [[ -z "$amd64_found" ]]; then
-                      echo "Multi-platform support  for $IMAGE_NAME:$tag - have amd64"
-                  else
                       echo "Multi-platform support check failed for $IMAGE_NAME:$tag - missing amd64"
                       exit 1
+                  # else
+                      # echo "Multi-platform support  for $IMAGE_NAME:$tag - have amd64"
                   fi
               done
           done
@@ -200,10 +200,10 @@ jobs:
                   fi
                   arm64_found=$(echo "$manifest" | jq '.manifests[] | select(.platform.architecture == "arm64")')
                   if [[ -z "$arm64_found" ]]; then
-                      echo "Multi-platform support  for $IMAGE_NAME:$tag - have arm64"
-                  else
                       echo "Multi-platform support check failed for $IMAGE_NAME:$tag - missing arm64"
                       exit 1
+                  # else
+                      # echo "Multi-platform support  for $IMAGE_NAME:$tag - have arm64"
                   fi
               done
           done
