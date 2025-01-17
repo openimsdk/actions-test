@@ -110,7 +110,7 @@ jobs:
                       # exit 1
                   fi
                   # else
-                      # echo "Multi-platform support  for $IMAGE_NAME:$tag - have amd64"
+                      echo "Multi-platform support  for $IMAGE_NAME:$tag - have amd64"
               done
           done
 
@@ -205,8 +205,8 @@ jobs:
                   if [[ -z "$arm64_found" ]]; then
                       echo "Multi-platform support check failed for $IMAGE_NAME:$tag - missing arm64"
                       exit 1
-                  # else
-                      # echo "Multi-platform support  for $IMAGE_NAME:$tag - have arm64"
                   fi
+                  # else
+                      echo "Multi-platform support  for $IMAGE_NAME:$tag - have arm64"
               done
           done
