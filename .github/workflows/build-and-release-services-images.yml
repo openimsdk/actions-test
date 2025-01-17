@@ -102,6 +102,7 @@ jobs:
                       exit 1
                   fi
                   amd64_found=$(echo "$manifest" | jq '.manifests[] | select(.platform.architecture == "amd64")')
+                  echo "amd64_found is: $amd64_found"
                   if [[ -z "$amd64_found" ]]; then
                       echo "Multi-platform support check failed for $IMAGE_NAME:$tag - missing amd64"
                       exit 1
