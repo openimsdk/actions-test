@@ -151,7 +151,6 @@ jobs:
             type=ref,event=branch
             type=semver,pattern={{version}}
             type=semver,pattern=v{{version}}
-            # type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern=release-{{raw}}
             type=sha
             type=raw,value=${{ github.event.inputs.tag }}
@@ -173,8 +172,8 @@ jobs:
                   # Read each tag and append --tag arguments
                   while IFS= read -r tag; do
                       tag_args+=(--tag "${{ secrets.DOCKER_USERNAME }}/$IMAGE_NAME:$tag")
-                      tag_args+=(--tag "ghcr.io/${{ github.repository_owner }}/$IMAGE_NAME:$tag")
-                      tag_args+=(--tag "registry.cn-hangzhou.aliyuncs.com/openimsdk/$IMAGE_NAME:$tag")
+                      # tag_args+=(--tag "ghcr.io/${{ github.repository_owner }}/$IMAGE_NAME:$tag")
+                      # tag_args+=(--tag "registry.cn-hangzhou.aliyuncs.com/openimsdk/$IMAGE_NAME:$tag")
                   done <<< "${{ steps.meta.outputs.tags }}"
 
                   # Build and push the Docker image with all tags
@@ -199,6 +198,7 @@ jobs:
                       exit 1
                   fi
                   arm64_found=$(echo "$manifest" | jq '.manifests[] | select(.platform.architecture == "arm64")')
+                  echo "arm64_found is: $arm64_found"
                   if [[ -z "$arm64_found" ]]; then
                       echo "Multi-platform support check failed for $IMAGE_NAME:$tag - missing arm64"
                       exit 1
