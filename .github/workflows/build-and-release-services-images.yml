@@ -197,7 +197,7 @@ jobs:
           done
       - name: Verify multi-platform support
         run: |
-          MAX_RETRIES=3
+          MAX_RETRIES=6
           RETRY_DELAY=10
           for ((i=1; i<=MAX_RETRIES; i++)); do
               manifest=$(docker manifest inspect "${{ secrets.DOCKER_USERNAME }}/$IMAGE_NAME:$tag" || echo "error")
