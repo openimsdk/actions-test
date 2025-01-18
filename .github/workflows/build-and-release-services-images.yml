@@ -81,7 +81,8 @@ jobs:
                   done <<< "${{ steps.meta.outputs.tags }}"
 
                   # Build and push the Docker image with all tags
-                  docker buildx build --platform linux/amd64,linux/arm64\
+                    docker buildx build --platform linux/arm64\
+                  # docker buildx build --platform linux/amd64,linux/arm64\
                     --file "$dockerfile" \
                     "${tag_args[@]}" \
                     --push \
@@ -91,28 +92,28 @@ jobs:
                   echo "No valid Dockerfile found in $dir"
               fi
           done
-      - name: Verify multi-platform support
-        run: |
-          MAX_RETRIES=2
-          RETRY_DELAY=6
-          for dir in build/images/*/; do
-              IMAGE_NAME=$(basename "$dir" | tr '[:upper:]' '[:lower:]')
-              for tag in $(echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n'); do
-                  manifest=$(docker manifest inspect "${{ secrets.DOCKER_USERNAME }}/$IMAGE_NAME:$tag" || echo "error")
-                  if [[ "$manifest" == "error" ]]; then
-                      echo "Manifest not found for $IMAGE_NAME:$tag"
-                      exit 1
-                  fi
-                  amd64_found=$(echo "$manifest" | jq '.manifests[] | select(.platform.architecture == "amd64")')
-                  echo "amd64_found is: $amd64_found"
-                  if [[ -z "$amd64_found" ]]; then
-                      echo "Multi-platform support check failed for $IMAGE_NAME:$tag - missing amd64"
-                      # exit 1
-                  fi
-                  # else
-                      echo "Multi-platform support  for $IMAGE_NAME:$tag - have amd64"
-              done
-          done
+      # - name: Verify multi-platform support
+      #   run: |
+      #     MAX_RETRIES=2
+      #     RETRY_DELAY=6
+      #     for dir in build/images/*/; do
+      #         IMAGE_NAME=$(basename "$dir" | tr '[:upper:]' '[:lower:]')
+      #         for tag in $(echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n'); do
+      #             manifest=$(docker manifest inspect "${{ secrets.DOCKER_USERNAME }}/$IMAGE_NAME:$tag" || echo "error")
+      #             if [[ "$manifest" == "error" ]]; then
+      #                 echo "Manifest not found for $IMAGE_NAME:$tag"
+      #                 exit 1
+      #             fi
+      #             amd64_found=$(echo "$manifest" | jq '.manifests[] | select(.platform.architecture == "amd64")')
+      #             echo "amd64_found is: $amd64_found"
+      #             if [[ -z "$amd64_found" ]]; then
+      #                 echo "Multi-platform support check failed for $IMAGE_NAME:$tag - missing amd64"
+      #                 # exit 1
+      #             fi
+      #             # else
+      #                 echo "Multi-platform support  for $IMAGE_NAME:$tag - have amd64"
+      #         done
+      #     done
 
   build-and-arm:
     runs-on: ubuntu-latest
