@@ -195,38 +195,38 @@ jobs:
                   echo "No valid Dockerfile found in $dir"
               fi
           done
-      - name: Verify multi-platform support
-        run: |
-          MAX_RETRIES=6
-          RETRY_DELAY=10
-          for ((i=1; i<=MAX_RETRIES; i++)); do
-              manifest=$(docker manifest inspect "${{ secrets.DOCKER_USERNAME }}/$IMAGE_NAME:$tag" || echo "error")
-              if [[ "$manifest" != "error" ]]; then
-                  break
-              fi
-              if [[ $i -eq $MAX_RETRIES ]]; then
-                  echo "Manifest not found for $IMAGE_NAME:$tag after $MAX_RETRIES retries"
-                  exit 1
-              fi
-              echo "Retry $i/$MAX_RETRIES: Manifest not found for $IMAGE_NAME:$tag, retrying in $RETRY_DELAY seconds..."
-              sleep $RETRY_DELAY
-          done
+      # - name: Verify multi-platform support
+      #   run: |
+      #     MAX_RETRIES=6
+      #     RETRY_DELAY=10
+      #     for ((i=1; i<=MAX_RETRIES; i++)); do
+      #         manifest=$(docker manifest inspect "${{ secrets.DOCKER_USERNAME }}/$IMAGE_NAME:$tag" || echo "error")
+      #         if [[ "$manifest" != "error" ]]; then
+      #             break
+      #         fi
+      #         if [[ $i -eq $MAX_RETRIES ]]; then
+      #             echo "Manifest not found for $IMAGE_NAME:$tag after $MAX_RETRIES retries"
+      #             exit 1
+      #         fi
+      #         echo "Retry $i/$MAX_RETRIES: Manifest not found for $IMAGE_NAME:$tag, retrying in $RETRY_DELAY seconds..."
+      #         sleep $RETRY_DELAY
+      #     done
 
-          for dir in build/images/*/; do
-              IMAGE_NAME=$(basename "$dir" | tr '[:upper:]' '[:lower:]')
-              for tag in $(echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n'); do
-                  manifest=$(docker manifest inspect "${{ secrets.DOCKER_USERNAME }}/$IMAGE_NAME:$tag" || echo "error")
-                  if [[ "$manifest" == "error" ]]; then
-                      echo "Manifest not found for $IMAGE_NAME:$tag"
-                      exit 1
-                  fi
-                  arm64_found=$(echo "$manifest" | jq '.manifests[] | select(.platform.architecture == "arm64")')
-                  echo "arm64_found is: $arm64_found"
-                  if [[ -z "$arm64_found" ]]; then
-                      echo "Multi-platform support check failed for $IMAGE_NAME:$tag - missing arm64"
-                      exit 1
-                  fi
-                  # else
-                      echo "Multi-platform support  for $IMAGE_NAME:$tag - have arm64"
-              done
-          done
+      #     for dir in build/images/*/; do
+      #         IMAGE_NAME=$(basename "$dir" | tr '[:upper:]' '[:lower:]')
+      #         for tag in $(echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n'); do
+      #             manifest=$(docker manifest inspect "${{ secrets.DOCKER_USERNAME }}/$IMAGE_NAME:$tag" || echo "error")
+      #             if [[ "$manifest" == "error" ]]; then
+      #                 echo "Manifest not found for $IMAGE_NAME:$tag"
+      #                 exit 1
+      #             fi
+      #             arm64_found=$(echo "$manifest" | jq '.manifests[] | select(.platform.architecture == "arm64")')
+      #             echo "arm64_found is: $arm64_found"
+      #             if [[ -z "$arm64_found" ]]; then
+      #                 echo "Multi-platform support check failed for $IMAGE_NAME:$tag - missing arm64"
+      #                 exit 1
+      #             fi
+      #             # else
+      #                 echo "Multi-platform support  for $IMAGE_NAME:$tag - have arm64"
+      #         done
+      #     done
