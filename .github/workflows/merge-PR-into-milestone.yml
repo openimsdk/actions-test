@@ -101,13 +101,27 @@ jobs:
 
             if [ "$merge_commit" != "null" ];then
               git fetch origin
+              
+              echo "Checking out target branch: $TARGET_BRANCH"
               git checkout $TARGET_BRANCH
+
+              echo "Pulling latest changes from target branch: $TARGET_BRANCH"
               git pull origin $TARGET_BRANCH
+              
               cherry_pick_branch="cherry-pick-${short_commit_hash}"
               git checkout -b $cherry_pick_branch
+
+              echo "Cherry-picking commit: $merge_commit"
+              if ! git cherry-pick "$merge_commit" --strategy=recursive -X theirs; then
+                echo "Cherry-pick encountered conflicts, attempting to continue..."
+                git cherry-pick --continue || { echo "Cherry-pick failed"; exit 1; }
+              fi
+
               git cherry-pick "$merge_commit" --strategy=recursive -X theirs || git cherry-pick --continue
               git remote set-url origin "https://${BOT_TOKEN}@github.com/${{ github.repository }}.git"
-              git push origin $cherry_pick_branch --force
+              
+              echo "Pushing branch: $cherry_pick_branch"
+              git push origin $cherry_pick_branch --force || { echo "Push failed"; exit 1; }
 
               new_pr_title="$pr_title [Created by @$pr_creator from #$pr_number]"
               new_pr_body="$pr_body
