@@ -1,0 +1,62 @@
+name: Create Pre-Release PR from Milestone(Deprecated)
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      milestone_name:
+        description: "Milestone name to collect closed PRs from"
+        required: true
+        default: "v3.8.2"
+      target_branch:
+        description: "Target branch to merge the consolidated PR"
+        required: true
+        default: "pre-release-v3.8.2"
+
+env:
+  MILESTONE_NAME: ${{ github.event.inputs.milestone_name || 'v3.8.2' }}
+  TARGET_BRANCH: ${{ github.event.inputs.target_branch || 'pre-release-v3.8.2' }}
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+  LABEL_NAME: cherry-picked
+  TEMP_DIR: /tmp # Using /tmp as the temporary directory
+
+jobs:
+  cherry_pick_milestone_prs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup temp directory
+        run: |
+          # Create the temporary directory and initialize necessary files
+          mkdir -p ${{ env.TEMP_DIR }}
+          touch ${{ env.TEMP_DIR }}/pr_numbers.txt
+          touch ${{ env.TEMP_DIR }}/commit_hashes.txt
+          touch ${{ env.TEMP_DIR }}/pr_title.txt
+          touch ${{ env.TEMP_DIR }}/pr_body.txt
+          touch ${{ env.TEMP_DIR }}/created_pr_number.txt
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.BOT_TOKEN }}
+
+      - name: Setup Git User for OpenIM-Robot
+        run: |
+          # Set up Git credentials for the bot
+          git config --global user.email "OpenIM-Robot@users.noreply.github.com"
+          git config --global user.name "OpenIM-Robot"
+      - name: Fetch Milestone ID and Filter PR Numbers
+        env:
+          MILESTONE_NAME: ${{ env.MILESTONE_NAME }}
+        run: |
+          # Fetch milestone details and extract milestone ID
+          milestones=$(curl -s -H "Authorization: token $BOT_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/milestones")
+          milestone_id=$(echo "$milestones" | grep -B3 "\"title\": \"$MILESTONE_NAME\"" | grep '"number":' | head -n1 | grep -o '[0-9]\+')
+          if [ -z "$milestone_id" ]; then
+            echo "Milestone '$MILESTONE_NAME' not found. Exiting."
