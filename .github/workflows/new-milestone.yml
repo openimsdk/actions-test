@@ -193,77 +193,144 @@ jobs:
             new_branch="milestone-$MILESTONE_NAME-pr-$pr_number"
             git checkout -B $new_branch $TARGET_BRANCH
             
-            # Get PR file changes
-            pr_files=$(curl -s -H "Authorization: token $BOT_TOKEN" \
-              "https://api.github.com/repos/${{ github.repository }}/pulls/$pr_number/files" | jq -r '.[] | .filename')
-            
-            # Get PR diff
-            pr_diff=$(curl -s -H "Accept: application/vnd.github.v3.diff" -H "Authorization: token $BOT_TOKEN" \
-              "https://api.github.com/repos/${{ github.repository }}/pulls/$pr_number")
-            
-            # Save diff to file
-            echo "$pr_diff" > /tmp/pr_diff.patch
-            
-            # Try to apply patch
-            if git apply --check /tmp/pr_diff.patch 2>/dev/null; then
-              echo "Applying changes..."
-              git apply /tmp/pr_diff.patch
+            # Try approach 1: Cherry-pick with conflict resolution strategy
+            echo "Attempt 1: Cherry-picking merge commit with conflict resolution..."
+            if git fetch origin $merge_sha && git cherry-pick --strategy=recursive -X theirs $merge_sha; then
+              echo "✅ Cherry-pick successful!"
+            else
+              # Abort failed cherry-pick
+              git cherry-pick --abort
               
-              # Add modified files
-              if [ -n "$pr_files" ]; then
-                for file in $pr_files; do
-                  if [ -f "$file" ]; then
-                    git add "$file"
+              # Try approach 2: Get PR files and apply with 3-way merge
+              echo "Attempt 2: Using PR diff with 3-way merge..."
+              
+              # Get PR diff
+              pr_diff=$(curl -s -H "Accept: application/vnd.github.v3.diff" -H "Authorization: token $BOT_TOKEN" \
+                "https://api.github.com/repos/${{ github.repository }}/pulls/$pr_number")
+              
+              # Save diff to file
+              echo "$pr_diff" > /tmp/pr_diff.patch
+              
+              # Try to apply patch with 3-way merge
+              if git apply --reject --3way /tmp/pr_diff.patch; then
+                echo "✅ Patch applied successfully with 3-way merge"
+                
+                # Get PR file changes to ensure we add them all
+                pr_files=$(curl -s -H "Authorization: token $BOT_TOKEN" \
+                  "https://api.github.com/repos/${{ github.repository }}/pulls/$pr_number/files" | jq -r '.[] | .filename')
+                
+                # Add all files (including resolved conflicts)
+                if [ -n "$pr_files" ]; then
+                  for file in $pr_files; do
+                    if [ -f "$file" ]; then
+                      git add "$file"
+                    fi
+                  done
+                fi
+                
+                # Add any other potentially modified files
+                git add -A
+              else
+                echo "❌ Attempt 2 failed as well"
+                
+                # If both attempts failed, try manual file replacement approach
+                echo "Attempt 3: Manual file replacement based on PR changes..."
+                
+                # Get files changed in the PR
+                files_json=$(curl -s -H "Authorization: token $BOT_TOKEN" \
+                  "https://api.github.com/repos/${{ github.repository }}/pulls/$pr_number/files")
+                
+                # Flag to track if any files were successfully updated
+                files_updated=false
+                
+                # Process each file
+                echo "$files_json" | jq -c '.[]' | while read -r file_data; do
+                  status=$(echo "$file_data" | jq -r '.status')
+                  filename=$(echo "$file_data" | jq -r '.filename')
+                  
+                  echo "Processing file: $filename (status: $status)"
+                  
+                  if [ "$status" = "added" ] || [ "$status" = "modified" ]; then
+                    # Get file contents from the merge commit
+                    file_content=$(git show "$merge_sha:$filename" 2>/dev/null)
+                    exit_code=$?
+                    
+                    if [ $exit_code -eq 0 ] && [ -n "$file_content" ]; then
+                      # Ensure directory exists
+                      mkdir -p "$(dirname "$filename")"
+                      # Write content to file
+                      echo "$file_content" > "$filename"
+                      git add "$filename"
+                      echo "✅ Updated $filename with content from merge commit"
+                      files_updated=true
+                    else
+                      echo "⚠️ Could not get content for $filename from merge commit"
+                    }
+                  elif [ "$status" = "removed" ]; then
+                    if [ -f "$filename" ]; then
+                      git rm "$filename"
+                      echo "✅ Removed $filename"
+                      files_updated=true
+                    fi
                   fi
                 done
+                
+                if [ "$files_updated" = false ]; then
+                  echo "❌ Could not update any files using any method"
+                  # Record failure
+                  jq --argjson result "{\"original_pr\": $pr_number, \"status\": \"failure\", \"message\": \"All merge attempts failed\"}" \
+                    '.+= [$result]' /tmp/milestone_migration/results.json > /tmp/milestone_migration/results.json.tmp
+                  mv /tmp/milestone_migration/results.json.tmp /tmp/milestone_migration/results.json
+                  
+                  # Switch back to target branch and continue with next PR
+                  git reset --hard
+                  git checkout $TARGET_BRANCH
+                  continue
+                fi
               fi
               
-              # Commit changes
-              git commit -m "Apply changes from PR #$pr_number: $pr_title"
+              # If we reached here, we managed to apply changes one way or another
+              echo "Creating commit with applied changes"
+              git commit -m "Apply changes from PR #$pr_number: $pr_title" || echo "Nothing to commit"
+            fi
+            
+            # At this point we should have applied the changes successfully
+            # Push new branch
+            git remote set-url origin "https://${BOT_TOKEN}@github.com/${{ github.repository }}.git"
+            git push -f origin $new_branch
+            
+            # Create new PR
+            new_pr_title="[$MILESTONE_NAME] $pr_title"
+            new_pr_body="This PR applies changes from PR #$pr_number (submitted by @$pr_creator) to the \`$TARGET_BRANCH\` branch.\n\nOriginal PR: #$pr_number\n\n---\n\n$pr_body"
+            
+            pr_response=$(curl -s -X POST -H "Authorization: token $BOT_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/pulls" \
+              -d "$(jq -n --arg title "$new_pr_title" \
+                   --arg body "$new_pr_body" \
+                   --arg head "$new_branch" \
+                   --arg base "$TARGET_BRANCH" \
+                   '{title: $title, body: $body, head: $head, base: $base}')")
+            
+            new_pr_number=$(echo "$pr_response" | jq -r '.number')
+            
+            if [ "$new_pr_number" != "null" ]; then
+              echo "✅ Successfully created new PR #$new_pr_number"
               
-              # Push new branch
-              git remote set-url origin "https://${BOT_TOKEN}@github.com/${{ github.repository }}.git"
-              git push -f origin $new_branch
-              
-              # Create new PR
-              new_pr_title="[$MILESTONE_NAME] $pr_title"
-              new_pr_body="This PR applies changes from PR #$pr_number (submitted by @$pr_creator) to the \`$TARGET_BRANCH\` branch.\n\nOriginal PR: #$pr_number\n\n---\n\n$pr_body"
-              
-              pr_response=$(curl -s -X POST -H "Authorization: token $BOT_TOKEN" \
+              # Add labels
+              curl -s -X POST -H "Authorization: token $BOT_TOKEN" \
                 -H "Accept: application/vnd.github+json" \
-                "https://api.github.com/repos/${{ github.repository }}/pulls" \
-                -d "$(jq -n --arg title "$new_pr_title" \
-                     --arg body "$new_pr_body" \
-                     --arg head "$new_branch" \
-                     --arg base "$TARGET_BRANCH" \
-                     '{title: $title, body: $body, head: $head, base: $base}')")
+                "https://api.github.com/repos/${{ github.repository }}/issues/$new_pr_number/labels" \
+                -d "{\"labels\":[\"$LABEL_NEW\"]}"
               
-              new_pr_number=$(echo "$pr_response" | jq -r '.number')
-              
-              if [ "$new_pr_number" != "null" ]; then
-                echo "✅ Successfully created new PR #$new_pr_number"
-                
-                # Add labels
-                curl -s -X POST -H "Authorization: token $BOT_TOKEN" \
-                  -H "Accept: application/vnd.github+json" \
-                  "https://api.github.com/repos/${{ github.repository }}/issues/$new_pr_number/labels" \
-                  -d "{\"labels\":[\"$LABEL_NEW\"]}"
-                
-                # Record successful result
-                jq --argjson result "{\"original_pr\": $pr_number, \"new_pr\": $new_pr_number, \"status\": \"success\", \"message\": \"Successfully created PR #$new_pr_number\"}" \
-                  '.+= [$result]' /tmp/milestone_migration/results.json > /tmp/milestone_migration/results.json.tmp
-                mv /tmp/milestone_migration/results.json.tmp /tmp/milestone_migration/results.json
-              else
-                echo "❌ Failed to create PR"
-                # Record failure
-                jq --argjson result "{\"original_pr\": $pr_number, \"status\": \"failure\", \"message\": \"Failed to create PR\"}" \
-                  '.+= [$result]' /tmp/milestone_migration/results.json > /tmp/milestone_migration/results.json.tmp
-                mv /tmp/milestone_migration/results.json.tmp /tmp/milestone_migration/results.json
-              fi
+              # Record successful result
+              jq --argjson result "{\"original_pr\": $pr_number, \"new_pr\": $new_pr_number, \"status\": \"success\", \"message\": \"Successfully created PR #$new_pr_number\"}" \
+                '.+= [$result]' /tmp/milestone_migration/results.json > /tmp/milestone_migration/results.json.tmp
+              mv /tmp/milestone_migration/results.json.tmp /tmp/milestone_migration/results.json
             else
-              echo "❌ Failed to apply patch, possible conflicts"
+              echo "❌ Failed to create PR"
               # Record failure
-              jq --argjson result "{\"original_pr\": $pr_number, \"status\": \"failure\", \"message\": \"Failed to apply patch, possible conflicts\"}" \
+              jq --argjson result "{\"original_pr\": $pr_number, \"status\": \"failure\", \"message\": \"Failed to create PR\"}" \
                 '.+= [$result]' /tmp/milestone_migration/results.json > /tmp/milestone_migration/results.json.tmp
               mv /tmp/milestone_migration/results.json.tmp /tmp/milestone_migration/results.json
             fi
