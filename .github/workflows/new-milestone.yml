@@ -1,4 +1,4 @@
-name: New Milestone
+name: Milestone Migration
 
 permissions:
   contents: write
@@ -193,109 +193,76 @@ jobs:
             new_branch="milestone-$MILESTONE_NAME-pr-$pr_number"
             git checkout -B $new_branch $TARGET_BRANCH
             
-            # Try approach 1: Cherry-pick with conflict resolution strategy
-            echo "Attempt 1: Cherry-picking merge commit with conflict resolution..."
+            # Flag to track if we need to create an empty commit
+            create_empty_commit=false
+            changes_applied=false
+            
+            # Get files changed in the PR for reference
+            files_json=$(curl -s -H "Authorization: token $BOT_TOKEN" \
+              "https://api.github.com/repos/${{ github.repository }}/pulls/$pr_number/files")
+            
+            # Try cherry-pick first - the simplest approach
+            echo "Attempting to cherry-pick commit $merge_sha..."
             if git fetch origin $merge_sha && git cherry-pick --strategy=recursive -X theirs $merge_sha; then
               echo "✅ Cherry-pick successful!"
+              changes_applied=true
             else
-              # Abort failed cherry-pick
+              # Cherry-pick failed - abort and try manual approach
               git cherry-pick --abort
               
-              # Try approach 2: Get PR files and apply with 3-way merge
-              echo "Attempt 2: Using PR diff with 3-way merge..."
+              # Simple approach - apply each file change individually
+              echo "Cherry-pick failed, attempting file-by-file changes..."
               
-              # Get PR diff
-              pr_diff=$(curl -s -H "Accept: application/vnd.github.v3.diff" -H "Authorization: token $BOT_TOKEN" \
-                "https://api.github.com/repos/${{ github.repository }}/pulls/$pr_number")
+              # Track if we've made any successful changes
+              file_changes_made=false
               
-              # Save diff to file
-              echo "$pr_diff" > /tmp/pr_diff.patch
-              
-              # Try to apply patch with 3-way merge
-              if git apply --reject --3way /tmp/pr_diff.patch; then
-                echo "✅ Patch applied successfully with 3-way merge"
+              echo "$files_json" | jq -c '.[]' | while read -r file_data; do
+                status=$(echo "$file_data" | jq -r '.status')
+                filename=$(echo "$file_data" | jq -r '.filename')
                 
-                # Get PR file changes to ensure we add them all
-                pr_files=$(curl -s -H "Authorization: token $BOT_TOKEN" \
-                  "https://api.github.com/repos/${{ github.repository }}/pulls/$pr_number/files" | jq -r '.[] | .filename')
+                echo "Processing file: $filename (status: $status)"
                 
-                # Add all files (including resolved conflicts)
-                if [ -n "$pr_files" ]; then
-                  for file in $pr_files; do
-                    if [ -f "$file" ]; then
-                      git add "$file"
-                    fi
-                  done
-                fi
-                
-                # Add any other potentially modified files
-                git add -A
-              else
-                echo "❌ Attempt 2 failed as well"
-                
-                # If both attempts failed, try manual file replacement approach
-                echo "Attempt 3: Manual file replacement based on PR changes..."
-                
-                # Get files changed in the PR
-                files_json=$(curl -s -H "Authorization: token $BOT_TOKEN" \
-                  "https://api.github.com/repos/${{ github.repository }}/pulls/$pr_number/files")
-                
-                # Flag to track if any files were successfully updated
-                files_updated=false
-                
-                # Process each file
-                echo "$files_json" | jq -c '.[]' | while read -r file_data; do
-                  status=$(echo "$file_data" | jq -r '.status')
-                  filename=$(echo "$file_data" | jq -r '.filename')
-                  
-                  echo "Processing file: $filename (status: $status)"
-                  
-                  if [ "$status" = "added" ] || [ "$status" = "modified" ]; then
-                    # Get file contents from the merge commit
-                    file_content=$(git show "$merge_sha:$filename" 2>/dev/null)
-                    exit_code=$?
-                    
-                    if [ $exit_code -eq 0 ] && [ -n "$file_content" ]; then
-                      # Ensure directory exists
-                      mkdir -p "$(dirname "$filename")"
-                      # Write content to file
-                      echo "$file_content" > "$filename"
-                      git add "$filename"
-                      echo "✅ Updated $filename with content from merge commit"
-                      files_updated=true
-                    else
-                      echo "⚠️ Could not get content for $filename from merge commit"
-                    fi
-                  elif [ "$status" = "removed" ]; then
-                    if [ -f "$filename" ]; then
-                      git rm "$filename"
-                      echo "✅ Removed $filename"
-                      files_updated=true
-                    fi
+                if [ "$status" = "added" ] || [ "$status" = "modified" ]; then
+                  # Get file contents from the merge commit
+                  if git show "$merge_sha:$filename" > /tmp/file_content 2>/dev/null; then
+                    # Ensure directory exists
+                    mkdir -p "$(dirname "$filename")"
+                    # Write content to file
+                    cat /tmp/file_content > "$filename"
+                    git add "$filename"
+                    echo "✅ Updated $filename with content from merge commit"
+                    file_changes_made=true
+                  else
+                    echo "⚠️ Could not get content for $filename from merge commit"
                   fi
-                done
-                
-                if [ "$files_updated" = false ]; then
-                  echo "❌ Could not update any files using any method"
-                  # Record failure
-                  jq --argjson result "{\"original_pr\": $pr_number, \"status\": \"failure\", \"message\": \"All merge attempts failed\"}" \
-                    '.+= [$result]' /tmp/milestone_migration/results.json > /tmp/milestone_migration/results.json.tmp
-                  mv /tmp/milestone_migration/results.json.tmp /tmp/milestone_migration/results.json
-                  
-                  # Switch back to target branch and continue with next PR
-                  git reset --hard
-                  git checkout $TARGET_BRANCH
-                  continue
+                elif [ "$status" = "removed" ]; then
+                  if [ -f "$filename" ]; then
+                    git rm "$filename" 2>/dev/null || true
+                    echo "✅ Removed $filename"
+                    file_changes_made=true
+                  fi
                 fi
-              fi
+              done
               
-              # If we reached here, we managed to apply changes one way or another
-              echo "Creating commit with applied changes"
-              git commit -m "Apply changes from PR #$pr_number: $pr_title" || echo "Nothing to commit"
+              # Commit changes if any were made
+              if git diff --staged --quiet; then
+                echo "No changes were staged - creating empty commit"
+                create_empty_commit=true
+              else
+                echo "Committing file changes..."
+                git commit -m "Apply changes from PR #$pr_number: $pr_title"
+                changes_applied=true
+              fi
             fi
             
-            # At this point we should have applied the changes successfully
-            # Push new branch
+            # Create empty commit if needed - always create PR even for empty commits
+            if [ "$create_empty_commit" = "true" ] || [ "$changes_applied" = "false" ]; then
+              echo "Creating empty commit to represent PR #$pr_number"
+              git commit --allow-empty -m "Apply changes from PR #$pr_number: $pr_title (empty commit)"
+              changes_applied=true
+            fi
+            
+            # Always push branch and create PR - we want PRs for every original PR
             git remote set-url origin "https://${BOT_TOKEN}@github.com/${{ github.repository }}.git"
             git push -f origin $new_branch
             
