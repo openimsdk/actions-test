@@ -265,7 +265,7 @@ jobs:
                       files_updated=true
                     else
                       echo "⚠️ Could not get content for $filename from merge commit"
-                    }
+                    fi
                   elif [ "$status" = "removed" ]; then
                     if [ -f "$filename" ]; then
                       git rm "$filename"
