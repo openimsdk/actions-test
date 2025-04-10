@@ -1,4 +1,4 @@
-name: Milestone Migration
+name: New Milestone
 
 permissions:
   contents: write
@@ -19,6 +19,7 @@ on:
       sort_by:
         description: "Sort by"
         required: true
+        type: choice
         options:
           - merged_at
           - pr_number
