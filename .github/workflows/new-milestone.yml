@@ -9,11 +9,11 @@ on:
   workflow_dispatch:
     inputs:
       milestone_name:
-        description: "Milestone name:"
+        description: "Milestone name to collect closed PRs from"
         required: true
         default: "v3.8.4"
       target_branch:
-        description: "Target branch"
+        description: "Target branch to merge the consolidated PR"
         required: true
         default: "pre-release-v3.8.4"
       sort_by:
@@ -26,8 +26,8 @@ on:
         default: "merged_at"
 
 env:
-  MILESTONE_NAME: ${{ github.event.inputs.milestone_name }}
-  TARGET_BRANCH: ${{ github.event.inputs.target_branch }}
+  MILESTONE_NAME: ${{ github.event.inputs.milestone_name || 'v3.8.4' }}
+  TARGET_BRANCH: ${{ github.event.inputs.target_branch || 'pre-release-v3.8.4' }}
   SORT_BY: ${{ github.event.inputs.sort_by }}
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
@@ -99,6 +99,14 @@ jobs:
             # Get details for each PR
             jq -c '.[]' /tmp/milestone_migration/page_data.json | while read -r issue; do
               pr_number=$(echo "$issue" | jq -r '.number')
+              
+              # Check if PR has cherry-picked label
+              has_cherry_picked=$(echo "$issue" | jq -r '.labels | map(.name) | contains(["cherry-picked"])')
+              
+              if [ "$has_cherry_picked" = "true" ]; then
+                echo "Skipping PR #$pr_number: already has cherry-picked label"
+                continue
+              fi
               
               # Get PR details to confirm it's merged
               pr_data=$(curl -s -H "Authorization: token $BOT_TOKEN" \
@@ -204,13 +212,13 @@ jobs:
             # Try cherry-pick first - the simplest approach
             echo "Attempting to cherry-pick commit $merge_sha..."
             if git fetch origin $merge_sha && git cherry-pick --strategy=recursive -X theirs $merge_sha; then
-              echo "✅ Cherry-pick successful!"
+              echo "Cherry-pick successful!"
               changes_applied=true
               
               # Check if there are actual file changes after cherry-pick
               changed_files=$(git diff HEAD~1 HEAD --name-only | wc -l)
               if [ "$changed_files" -eq 0 ]; then
-                echo "🔍 Detected empty PR: cherry-pick successful but no actual file changes"
+                echo "Detected empty PR: cherry-pick successful but no actual file changes"
                 
                 # Record skip information and continue to next PR
                 jq --argjson result "{\"original_pr\": $pr_number, \"status\": \"skipped\", \"message\": \"Cherry-pick successful but no actual file changes\"}" \
@@ -247,19 +255,19 @@ jobs:
                     
                     # Check if file has changes before adding
                     if git diff --quiet HEAD "$filename"; then
-                      echo "⚠️ File $filename has no actual changes, not adding"
+                      echo "File $filename has no actual changes, not adding"
                     else
                       git add "$filename"
-                      echo "✅ Updated $filename with content from merge commit"
+                      echo "Updated $filename with content from merge commit"
                       echo "true" > /tmp/file_changes_made
                     fi
                   else
-                    echo "⚠️ Could not get content for $filename from merge commit"
+                    echo "Could not get content for $filename from merge commit"
                   fi
                 elif [ "$status" = "removed" ]; then
                   if [ -f "$filename" ]; then
                     git rm "$filename" 2>/dev/null || true
-                    echo "✅ Removed $filename"
+                    echo "Removed $filename"
                     echo "true" > /tmp/file_changes_made
                   fi
                 fi
@@ -309,7 +317,7 @@ jobs:
               new_pr_number=$(echo "$pr_response" | jq -r '.number')
               
               if [ "$new_pr_number" != "null" ]; then
-                echo "✅ Successfully created new PR #$new_pr_number"
+                echo "Successfully created new PR #$new_pr_number"
                 
                 # Add labels
                 curl -s -X POST -H "Authorization: token $BOT_TOKEN" \
@@ -322,7 +330,7 @@ jobs:
                   '.+= [$result]' /tmp/milestone_migration/results.json > /tmp/milestone_migration/results.json.tmp
                 mv /tmp/milestone_migration/results.json.tmp /tmp/milestone_migration/results.json
               else
-                echo "❌ Failed to create PR"
+                echo "Failed to create PR"
                 # Record failure
                 jq --argjson result "{\"original_pr\": $pr_number, \"status\": \"failure\", \"message\": \"Failed to create PR\"}" \
                   '.+= [$result]' /tmp/milestone_migration/results.json > /tmp/milestone_migration/results.json.tmp
