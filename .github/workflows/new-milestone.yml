@@ -295,9 +295,10 @@ jobs:
               
               # Create new PR
               new_pr_title="$pr_title [Created by @$pr_creator from #$pr_number]"
-              new_pr_body="$pr_body
+              new_pr_body=
+              "$pr_body
 
-              > This PR is created from original PR #$pr_number to the \`$TARGET_BRANCH\` branch as part of milestone $MILESTONE_NAME."
+              # > This PR is created from original PR #$pr_number."
               
               pr_response=$(curl -s -X POST -H "Authorization: token $BOT_TOKEN" \
                 -H "Accept: application/vnd.github+json" \
