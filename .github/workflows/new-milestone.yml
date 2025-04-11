@@ -294,8 +294,10 @@ jobs:
               git push -f origin $new_branch
               
               # Create new PR
-              new_pr_title="[$MILESTONE_NAME] $pr_title"
-              new_pr_body="This PR applies changes from PR #$pr_number (submitted by @$pr_creator) to the \`$TARGET_BRANCH\` branch.\n\nOriginal PR: #$pr_number\n\n---\n\n$pr_body"
+              new_pr_title="$pr_title [Created by @$pr_creator from #$pr_number]"
+              new_pr_body="$pr_body
+
+              > This PR is created from original PR #$pr_number to the \`$TARGET_BRANCH\` branch as part of milestone $MILESTONE_NAME."
               
               pr_response=$(curl -s -X POST -H "Authorization: token $BOT_TOKEN" \
                 -H "Accept: application/vnd.github+json" \
