@@ -1,4 +1,4 @@
-name: Milestone Migration
+name: New Milestone
 
 permissions:
   contents: write
@@ -206,6 +206,21 @@ jobs:
             if git fetch origin $merge_sha && git cherry-pick --strategy=recursive -X theirs $merge_sha; then
               echo "✅ Cherry-pick successful!"
               changes_applied=true
+              
+              # Check if there are actual file changes after cherry-pick
+              changed_files=$(git diff HEAD~1 HEAD --name-only | wc -l)
+              if [ "$changed_files" -eq 0 ]; then
+                echo "🔍 Detected empty PR: cherry-pick successful but no actual file changes"
+                
+                # Record skip information and continue to next PR
+                jq --argjson result "{\"original_pr\": $pr_number, \"status\": \"skipped\", \"message\": \"Cherry-pick successful but no actual file changes\"}" \
+                  '.+= [$result]' /tmp/milestone_migration/results.json > /tmp/milestone_migration/results.json.tmp
+                mv /tmp/milestone_migration/results.json.tmp /tmp/milestone_migration/results.json
+                
+                # Switch back to target branch and continue to next PR
+                git checkout $TARGET_BRANCH
+                continue
+              fi
             else
               # Cherry-pick failed - abort and try manual approach
               git cherry-pick --abort
@@ -213,8 +228,8 @@ jobs:
               # Simple approach - apply each file change individually
               echo "Cherry-pick failed, attempting file-by-file changes..."
               
-              # Track if we've made any successful changes
-              file_changes_made=false
+              # Track if we've made any successful changes using a file to persist across subshell
+              echo "false" > /tmp/file_changes_made
               
               echo "$files_json" | jq -c '.[]' | while read -r file_data; do
                 status=$(echo "$file_data" | jq -r '.status')
@@ -229,9 +244,15 @@ jobs:
                     mkdir -p "$(dirname "$filename")"
                     # Write content to file
                     cat /tmp/file_content > "$filename"
-                    git add "$filename"
-                    echo "✅ Updated $filename with content from merge commit"
-                    file_changes_made=true
+                    
+                    # Check if file has changes before adding
+                    if git diff --quiet HEAD "$filename"; then
+                      echo "⚠️ File $filename has no actual changes, not adding"
+                    else
+                      git add "$filename"
+                      echo "✅ Updated $filename with content from merge commit"
+                      echo "true" > /tmp/file_changes_made
+                    fi
                   else
                     echo "⚠️ Could not get content for $filename from merge commit"
                   fi
@@ -239,65 +260,78 @@ jobs:
                   if [ -f "$filename" ]; then
                     git rm "$filename" 2>/dev/null || true
                     echo "✅ Removed $filename"
-                    file_changes_made=true
+                    echo "true" > /tmp/file_changes_made
                   fi
                 fi
               done
               
+              # Read file changes status
+              file_changes_made=$(cat /tmp/file_changes_made)
+              
               # Commit changes if any were made
-              if git diff --staged --quiet; then
-                echo "No changes were staged - creating empty commit"
-                create_empty_commit=true
-              else
+              if [ "$file_changes_made" = "true" ] && ! git diff --staged --quiet; then
                 echo "Committing file changes..."
                 git commit -m "Apply changes from PR #$pr_number: $pr_title"
                 changes_applied=true
+              else
+                echo "🔍 Detected empty PR after conflict resolution: no actual file changes"
+                
+                # Record skip information and continue to next PR
+                jq --argjson result "{\"original_pr\": $pr_number, \"status\": \"skipped\", \"message\": \"No actual file changes after conflict resolution\"}" \
+                  '.+= [$result]' /tmp/milestone_migration/results.json > /tmp/milestone_migration/results.json.tmp
+                mv /tmp/milestone_migration/results.json.tmp /tmp/milestone_migration/results.json
+                
+                # Switch back to target branch and continue to next PR
+                git checkout $TARGET_BRANCH
+                continue
               fi
             fi
             
-            # Create empty commit if needed - always create PR even for empty commits
-            if [ "$create_empty_commit" = "true" ] || [ "$changes_applied" = "false" ]; then
-              echo "Creating empty commit to represent PR #$pr_number"
-              git commit --allow-empty -m "Apply changes from PR #$pr_number: $pr_title (empty commit)"
-              changes_applied=true
-            fi
-            
-            # Always push branch and create PR - we want PRs for every original PR
-            git remote set-url origin "https://${BOT_TOKEN}@github.com/${{ github.repository }}.git"
-            git push -f origin $new_branch
-            
-            # Create new PR
-            new_pr_title="[$MILESTONE_NAME] $pr_title"
-            new_pr_body="This PR applies changes from PR #$pr_number (submitted by @$pr_creator) to the \`$TARGET_BRANCH\` branch.\n\nOriginal PR: #$pr_number\n\n---\n\n$pr_body"
-            
-            pr_response=$(curl -s -X POST -H "Authorization: token $BOT_TOKEN" \
-              -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/repos/${{ github.repository }}/pulls" \
-              -d "$(jq -n --arg title "$new_pr_title" \
-                   --arg body "$new_pr_body" \
-                   --arg head "$new_branch" \
-                   --arg base "$TARGET_BRANCH" \
-                   '{title: $title, body: $body, head: $head, base: $base}')")
-            
-            new_pr_number=$(echo "$pr_response" | jq -r '.number')
-            
-            if [ "$new_pr_number" != "null" ]; then
-              echo "✅ Successfully created new PR #$new_pr_number"
+            # Only create PR when there are actual file changes
+            if [ "$changes_applied" = "true" ]; then
+              # Push new branch
+              git remote set-url origin "https://${BOT_TOKEN}@github.com/${{ github.repository }}.git"
+              git push -f origin $new_branch
               
-              # Add labels
-              curl -s -X POST -H "Authorization: token $BOT_TOKEN" \
+              # Create new PR
+              new_pr_title="[$MILESTONE_NAME] $pr_title"
+              new_pr_body="This PR applies changes from PR #$pr_number (submitted by @$pr_creator) to the \`$TARGET_BRANCH\` branch.\n\nOriginal PR: #$pr_number\n\n---\n\n$pr_body"
+              
+              pr_response=$(curl -s -X POST -H "Authorization: token $BOT_TOKEN" \
                 -H "Accept: application/vnd.github+json" \
-                "https://api.github.com/repos/${{ github.repository }}/issues/$new_pr_number/labels" \
-                -d "{\"labels\":[\"$LABEL_NEW\"]}"
+                "https://api.github.com/repos/${{ github.repository }}/pulls" \
+                -d "$(jq -n --arg title "$new_pr_title" \
+                     --arg body "$new_pr_body" \
+                     --arg head "$new_branch" \
+                     --arg base "$TARGET_BRANCH" \
+                     '{title: $title, body: $body, head: $head, base: $base}')")
               
-              # Record successful result
-              jq --argjson result "{\"original_pr\": $pr_number, \"new_pr\": $new_pr_number, \"status\": \"success\", \"message\": \"Successfully created PR #$new_pr_number\"}" \
-                '.+= [$result]' /tmp/milestone_migration/results.json > /tmp/milestone_migration/results.json.tmp
-              mv /tmp/milestone_migration/results.json.tmp /tmp/milestone_migration/results.json
+              new_pr_number=$(echo "$pr_response" | jq -r '.number')
+              
+              if [ "$new_pr_number" != "null" ]; then
+                echo "✅ Successfully created new PR #$new_pr_number"
+                
+                # Add labels
+                curl -s -X POST -H "Authorization: token $BOT_TOKEN" \
+                  -H "Accept: application/vnd.github+json" \
+                  "https://api.github.com/repos/${{ github.repository }}/issues/$new_pr_number/labels" \
+                  -d "{\"labels\":[\"$LABEL_NEW\"]}"
+                
+                # Record successful result
+                jq --argjson result "{\"original_pr\": $pr_number, \"new_pr\": $new_pr_number, \"status\": \"success\", \"message\": \"Successfully created PR #$new_pr_number\"}" \
+                  '.+= [$result]' /tmp/milestone_migration/results.json > /tmp/milestone_migration/results.json.tmp
+                mv /tmp/milestone_migration/results.json.tmp /tmp/milestone_migration/results.json
+              else
+                echo "❌ Failed to create PR"
+                # Record failure
+                jq --argjson result "{\"original_pr\": $pr_number, \"status\": \"failure\", \"message\": \"Failed to create PR\"}" \
+                  '.+= [$result]' /tmp/milestone_migration/results.json > /tmp/milestone_migration/results.json.tmp
+                mv /tmp/milestone_migration/results.json.tmp /tmp/milestone_migration/results.json
+              fi
             else
-              echo "❌ Failed to create PR"
-              # Record failure
-              jq --argjson result "{\"original_pr\": $pr_number, \"status\": \"failure\", \"message\": \"Failed to create PR\"}" \
+              echo "⏭️ Skip PR #$pr_number: no actual changes"
+              # Record as skipped
+              jq --argjson result "{\"original_pr\": $pr_number, \"status\": \"skipped\", \"message\": \"No actual changes\"}" \
                 '.+= [$result]' /tmp/milestone_migration/results.json > /tmp/milestone_migration/results.json.tmp
               mv /tmp/milestone_migration/results.json.tmp /tmp/milestone_migration/results.json
             fi
@@ -310,9 +344,10 @@ jobs:
         run: |
           echo "Generating results report..."
 
-          # Extract successful and failed PRs
+          # Extract successful, failed and skipped PRs
           success_count=$(jq '[.[] | select(.status == "success")] | length' /tmp/milestone_migration/results.json)
           failure_count=$(jq '[.[] | select(.status == "failure")] | length' /tmp/milestone_migration/results.json)
+          skipped_count=$(jq '[.[] | select(.status == "skipped")] | length' /tmp/milestone_migration/results.json)
           total_count=$(jq '. | length' /tmp/milestone_migration/results.json)
 
           # Create report Markdown
@@ -320,7 +355,8 @@ jobs:
           report_body="## Milestone $MILESTONE_NAME Migration Report\n\n"
           report_body+="- Total processed: $total_count PRs\n"
           report_body+="- Success: $success_count PRs\n"
-          report_body+="- Failed: $failure_count PRs\n\n"
+          report_body+="- Failed: $failure_count PRs\n"
+          report_body+="- Skipped: $skipped_count PRs (no actual changes)\n\n"
 
           if [ "$success_count" -gt 0 ]; then
             report_body+="### Successfully processed PRs:\n\n"
@@ -332,6 +368,12 @@ jobs:
             report_body+="### Failed PRs:\n\n"
             failure_prs=$(jq -r '.[] | select(.status == "failure") | "- PR #\(.original_pr): \(.message)"' /tmp/milestone_migration/results.json)
             report_body+="$failure_prs\n\n"
+          fi
+
+          if [ "$skipped_count" -gt 0 ]; then
+            report_body+="### Skipped PRs:\n\n"
+            skipped_prs=$(jq -r '.[] | select(.status == "skipped") | "- PR #\(.original_pr): \(.message)"' /tmp/milestone_migration/results.json)
+            report_body+="$skipped_prs\n\n"
           fi
 
           # Create issue
