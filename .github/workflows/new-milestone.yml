@@ -298,7 +298,7 @@ jobs:
               new_pr_body=
               "$pr_body
 
-              # > This PR is created from original PR #$pr_number."
+              > This PR is created from original PR #$pr_number."
               
               pr_response=$(curl -s -X POST -H "Authorization: token $BOT_TOKEN" \
                 -H "Accept: application/vnd.github+json" \
