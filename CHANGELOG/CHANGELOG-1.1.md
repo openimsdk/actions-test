@@ -1,3 +1,10 @@
+## [v1.1.16](https://github.com/openimsdk/actions-test/releases/tag/v1.1.16) 	(2025-04-14)
+
+### Others
+* Update CHANGELOG for release v1.1.15 [#139](https://github.com/openimsdk/actions-test/pull/139)
+
+**Full Changelog**: [v1.1.15...v1.1.16](https://github.com/openimsdk/actions-test/compare/v1.1.15...v1.1.16)
+
 ## [v1.1.15](https://github.com/openimsdk/actions-test/releases/tag/v1.1.15) 	(2025-04-14)
 
 ### New Features
