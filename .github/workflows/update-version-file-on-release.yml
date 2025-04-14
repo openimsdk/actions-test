@@ -26,31 +26,29 @@ jobs:
       - name: Check and delete existing tag
         run: |
           if git rev-parse ${{ env.TAG_VERSION }} >/dev/null 2>&1; then
-            git tag -d ${{ env.TAG_VERSION }}  # Delete local tag
-            git push --delete origin ${{ env.TAG_VERSION }}  # Delete remote tag
+            git tag -d ${{ env.TAG_VERSION }}
+            git push --delete origin ${{ env.TAG_VERSION }}
           fi
 
       # Step 4: Update version file
       - name: Update version file
         run: |
-          echo "${{ env.TAG_VERSION }}" > version/version  # Write the version to the file
+          echo "${{ env.TAG_VERSION }}" > version/version
 
-      # Step 5: Commit and push changes to the correct branch
+      # Step 5: Commit and push changes
       - name: Commit and push changes
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git add version/version
           git commit -m "Update version to ${{ env.TAG_VERSION }}"
-          git push origin HEAD:${{ github.ref }}  # Push to the current branch
+          git push origin HEAD:${{ github.ref }}
 
-      # Step 6: Create and push new tag
-      - name: Create and push tag
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Step 6: Update tag
+      - name: Update tag
         run: |
-          git tag ${{ env.TAG_VERSION }}  # Create new tag
-          git push origin ${{ env.TAG_VERSION }}  # Push the tag
+          git tag -fa ${{ env.TAG_VERSION }} -m "Update version to ${{ env.TAG_VERSION }}"
+          git push origin ${{ env.TAG_VERSION }} --force
 
       # Step 7: Find and Publish Draft Release
       - name: Find and Publish Draft Release
