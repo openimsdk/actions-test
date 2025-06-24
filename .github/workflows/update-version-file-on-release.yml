@@ -80,3 +80,64 @@ jobs:
             } else {
               core.info("No matching draft release found.");
             }
+
+      # Step 8: Create custom source code packages
+      - name: Create custom source code packages
+        run: |
+          # Create source package with git history (single branch)
+          git bundle create custom-source-with-history-${{ env.TAG_VERSION }}.bundle HEAD
+
+          # Create source packages without git history
+          git archive --format=zip --output=custom-source-${{ env.TAG_VERSION }}.zip HEAD
+          git archive --format=tar.gz --output=custom-source-${{ env.TAG_VERSION }}.tar.gz HEAD
+
+          # Verify files are created
+          ls -la custom-source-*
+
+      # Step 9: Find and Publish Draft Release
+      - name: Find and Publish Draft Release
+        id: publish-release
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            // Get the list of releases
+            const releases = await github.rest.repos.listReleases({
+              owner: context.repo.owner,
+              repo: context.repo.repo
+            });
+
+            // Find the draft release where the title and tag_name are the same
+            const draftRelease = releases.data.find(release => 
+              release.draft && release.name === release.tag_name
+            );
+
+            if (draftRelease) {
+              // Publish the draft release using the release_id
+              await github.rest.repos.updateRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                release_id: draftRelease.id,  // Use release_id
+                draft: false
+              });
+
+              core.info(`Draft Release ${draftRelease.tag_name} published successfully.`);
+              core.setOutput('release_published', 'true');
+            } else {
+              core.info("No matching draft release found.");
+              core.setOutput('release_published', 'false');
+            }
+
+      # Step 10: Upload custom source packages
+      - name: Upload custom source packages
+        if: steps.publish-release.outputs.release_published == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ env.TAG_VERSION }}
+          files: |
+            custom-source-with-history-${{ env.TAG_VERSION }}.bundle
+            custom-source-${{ env.TAG_VERSION }}.zip
+            custom-source-${{ env.TAG_VERSION }}.tar.gz
+          append_body: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
