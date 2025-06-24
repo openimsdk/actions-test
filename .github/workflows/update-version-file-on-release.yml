@@ -107,47 +107,60 @@ jobs:
 
           echo "Final branch to use: $CURRENT_BRANCH"
 
+          # 显示当前 git 状态以便调试
+          echo "Current git status for debugging:"
+          git branch -a
+          git remote -v
+          echo "Current commit: $(git rev-parse HEAD)"
+
           # 创建临时目录用于打包
           mkdir -p temp-package
 
-          # 尝试创建只包含指定分支历史的仓库副本
-          echo "Attempting to clone branch: $CURRENT_BRANCH"
-
-          # 首先尝试克隆指定分支
-          if git clone --single-branch --branch "$CURRENT_BRANCH" . temp-package/source-with-history 2>/dev/null; then
-            echo "Successfully cloned branch: $CURRENT_BRANCH"
+          # 方法1: 尝试直接从远程仓库克隆
+          echo "Attempting to clone from remote repository..."
+          REPO_URL="https://github.com/${{ github.repository }}.git"
+          
+          if git clone --single-branch --branch "$CURRENT_BRANCH" "$REPO_URL" temp-package/source-with-history 2>/dev/null; then
+            echo "Successfully cloned branch $CURRENT_BRANCH from remote"
           else
-            echo "Failed to clone specific branch, trying alternative method..."
+            echo "Failed to clone from remote, trying local methods..."
             
-            # 备用方法：创建新的仓库并复制当前状态
-            git init temp-package/source-with-history
+            # 方法2: 创建本地仓库副本
+            mkdir -p temp-package/source-with-history
+            
+            # 复制当前工作目录到临时目录（排除 .git）
+            rsync -av --exclude='.git' --exclude='temp-package' . temp-package/source-with-history/
+            
+            # 进入临时目录并初始化 git
             cd temp-package/source-with-history
-            
-            # 配置 git
+            git init
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             
-            # 添加原始仓库作为远程
-            git remote add origin ../../
+            # 添加当前仓库作为远程源
+            git remote add origin "$REPO_URL"
             
-            # 获取指定分支
-            git fetch origin "$CURRENT_BRANCH" || git fetch origin main || git fetch origin master
-            
-            # 检出到指定分支
-            git checkout -b "$CURRENT_BRANCH" "origin/$CURRENT_BRANCH" 2>/dev/null || \
-            git checkout -b "$CURRENT_BRANCH" origin/main 2>/dev/null || \
-            git checkout -b "$CURRENT_BRANCH" origin/master 2>/dev/null || \
-            {
-              echo "All branch checkout attempts failed, using current state"
-              cd ../..
-              cp -r . temp-package/source-with-history/
-              cd temp-package/source-with-history
-              git init
-              git config user.name "github-actions[bot]"
-              git config user.email "github-actions[bot]@users.noreply.github.com"
+            # 尝试获取指定分支的历史
+            echo "Fetching branch history..."
+            if git fetch origin "$CURRENT_BRANCH" 2>/dev/null; then
+              echo "Successfully fetched $CURRENT_BRANCH history"
+              # 重置到远程分支的状态
+              git reset --hard "origin/$CURRENT_BRANCH"
+              git checkout -b "$CURRENT_BRANCH"
+            elif git fetch origin main 2>/dev/null; then
+              echo "Fetched main branch history as fallback"
+              git reset --hard origin/main
+              git checkout -b "$CURRENT_BRANCH"
+            elif git fetch origin master 2>/dev/null; then
+              echo "Fetched master branch history as fallback"
+              git reset --hard origin/master
+              git checkout -b "$CURRENT_BRANCH"
+            else
+              echo "Could not fetch remote history, creating new history"
               git add .
-              git commit -m "Initial commit for ${{ env.TAG_VERSION }}"
-            }
+              git commit -m "Source code for release ${{ env.TAG_VERSION }}"
+              git checkout -b "$CURRENT_BRANCH"
+            fi
             
             cd ../..
           fi
@@ -159,9 +172,10 @@ jobs:
           # rm -rf .github/workflows/*.yml  # 如果不想包含工作流文件
 
           # 显示当前分支信息
-          echo "Current git status:"
+          echo "Final git status in package:"
           git branch -a 2>/dev/null || echo "No git branches found"
           git log --oneline -5 2>/dev/null || echo "No git history found"
+          git remote -v 2>/dev/null || echo "No remotes found"
 
           # 返回上级目录准备打包
           cd ..
