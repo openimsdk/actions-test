@@ -84,43 +84,110 @@ jobs:
       # Step 8: Create custom source code packages (只保留当前分支的记录)
       - name: Create custom source code packages
         run: |
+          # 获取当前分支名（从多个来源尝试）
+          CURRENT_BRANCH=""
+
+          # 方法1: 从 GitHub 事件中获取
+          if [ ! -z "${{ github.event.release.target_commitish }}" ]; then
+            CURRENT_BRANCH="${{ github.event.release.target_commitish }}"
+            echo "Branch from release target_commitish: $CURRENT_BRANCH"
+          fi
+
+          # 方法2: 从当前 HEAD 获取
+          if [ -z "$CURRENT_BRANCH" ]; then
+            CURRENT_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
+            echo "Branch from git HEAD: $CURRENT_BRANCH"
+          fi
+
+          # 方法3: 默认使用 main
+          if [ -z "$CURRENT_BRANCH" ] || [ "$CURRENT_BRANCH" = "HEAD" ]; then
+            CURRENT_BRANCH="main"
+            echo "Using default branch: $CURRENT_BRANCH"
+          fi
+
+          echo "Final branch to use: $CURRENT_BRANCH"
+
           # 创建临时目录用于打包
           mkdir -p temp-package
-          
-          # 使用 git clone 创建只包含当前分支历史的仓库副本
-          git clone --single-branch --branch $(git rev-parse --abbrev-ref HEAD) . temp-package/source-with-history
-          
+
+          # 尝试创建只包含指定分支历史的仓库副本
+          echo "Attempting to clone branch: $CURRENT_BRANCH"
+
+          # 首先尝试克隆指定分支
+          if git clone --single-branch --branch "$CURRENT_BRANCH" . temp-package/source-with-history 2>/dev/null; then
+            echo "Successfully cloned branch: $CURRENT_BRANCH"
+          else
+            echo "Failed to clone specific branch, trying alternative method..."
+            
+            # 备用方法：创建新的仓库并复制当前状态
+            git init temp-package/source-with-history
+            cd temp-package/source-with-history
+            
+            # 配置 git
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            
+            # 添加原始仓库作为远程
+            git remote add origin ../../
+            
+            # 获取指定分支
+            git fetch origin "$CURRENT_BRANCH" || git fetch origin main || git fetch origin master
+            
+            # 检出到指定分支
+            git checkout -b "$CURRENT_BRANCH" "origin/$CURRENT_BRANCH" 2>/dev/null || \
+            git checkout -b "$CURRENT_BRANCH" origin/main 2>/dev/null || \
+            git checkout -b "$CURRENT_BRANCH" origin/master 2>/dev/null || \
+            {
+              echo "All branch checkout attempts failed, using current state"
+              cd ../..
+              cp -r . temp-package/source-with-history/
+              cd temp-package/source-with-history
+              git init
+              git config user.name "github-actions[bot]"
+              git config user.email "github-actions[bot]@users.noreply.github.com"
+              git add .
+              git commit -m "Initial commit for ${{ env.TAG_VERSION }}"
+            }
+            
+            cd ../..
+          fi
+
           # 进入临时目录并清理不需要的文件
           cd temp-package/source-with-history
-          
+
           # 移除可能的大文件或不需要的目录（可选）
           # rm -rf .github/workflows/*.yml  # 如果不想包含工作流文件
-          
+
+          # 显示当前分支信息
+          echo "Current git status:"
+          git branch -a 2>/dev/null || echo "No git branches found"
+          git log --oneline -5 2>/dev/null || echo "No git history found"
+
           # 返回上级目录准备打包
           cd ..
-          
+
           # 创建包含完整分支历史的 ZIP 压缩包
           zip -r ../custom-source-with-history-${{ env.TAG_VERSION }}.zip source-with-history/
-          
+
           # 创建包含完整分支历史的 TAR.GZ 压缩包  
           tar -czf ../custom-source-with-history-${{ env.TAG_VERSION }}.tar.gz source-with-history/
-          
+
           # 返回工作目录
           cd ..
-          
+
           # 清理临时目录
           rm -rf temp-package
-          
+
           # 验证文件已创建
           echo "Created files:"
           ls -la custom-source-with-history-*
           echo "File sizes:"
           du -h custom-source-with-history-*
-          
+
           # 验证压缩包内容（显示目录结构）
-          echo "ZIP contents:"
+          echo "ZIP contents (first 20 lines):"
           unzip -l custom-source-with-history-${{ env.TAG_VERSION }}.zip | head -20
-          echo "TAR.GZ contents:"
+          echo "TAR.GZ contents (first 20 lines):"
           tar -tzf custom-source-with-history-${{ env.TAG_VERSION }}.tar.gz | head -20
 
       # Step 9: 直接使用当前 release 信息并上传文件
