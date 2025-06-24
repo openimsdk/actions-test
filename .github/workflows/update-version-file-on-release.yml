@@ -80,3 +80,59 @@ jobs:
             } else {
               core.info("No matching draft release found.");
             }
+
+      - name: Create custom source code packages
+        run: |
+          # 创建自定义源码包（与 GitHub 自动生成的名称不同）
+          git archive --format=zip --output=custom-source-${{ env.TAG_VERSION }}.zip HEAD
+          git archive --format=tar.gz --output=custom-source-${{ env.TAG_VERSION }}.tar.gz HEAD
+
+          # 验证文件已创建
+          ls -la custom-source-*
+
+      - name: Find and Publish Draft Release
+        id: publish-release
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            // Get the list of releases
+            const releases = await github.rest.repos.listReleases({
+              owner: context.repo.owner,
+              repo: context.repo.repo
+            });
+
+            // Find the draft release where the title and tag_name are the same
+            const draftRelease = releases.data.find(release => 
+              release.draft && release.name === release.tag_name
+            );
+
+            if (draftRelease) {
+              // Publish the draft release using the release_id
+              await github.rest.repos.updateRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                release_id: draftRelease.id,  // Use release_id
+                draft: false
+              });
+
+              core.info(`Draft Release ${draftRelease.tag_name} published successfully.`);
+              core.setOutput('release_published', 'true');
+            } else {
+              core.info("No matching draft release found.");
+              core.setOutput('release_published', 'false');
+            }
+
+      # Step 9: Upload additiona
+      - name: Upload custom source packages
+        if: steps.publish-release.outputs.release_published == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ env.TAG_VERSION }}
+          files: |
+            custom-source-${{ env.TAG_VERSION }}.zip
+            custom-source-${{ env.TAG_VERSION }}.tar.gz
+          append_body: true
+          # 注意：不设置 overwrite，默认为 false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
