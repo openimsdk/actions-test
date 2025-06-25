@@ -122,7 +122,6 @@ jobs:
             
             # git remote add origin "$REPO_URL"
             
-            # 尝试获取指定分支的历史
             echo "Fetching branch history..."
             if git fetch origin "$CURRENT_BRANCH" 2>/dev/null; then
               echo "Successfully fetched $CURRENT_BRANCH history"
