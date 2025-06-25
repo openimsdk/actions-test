@@ -169,9 +169,9 @@ jobs:
 
           # 验证文件已创建
           echo "Created files:"
-          ls -la $PROJECT_NAME-${{ env.TAG_VERSION }}.*
+          ls -la $PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.*
           echo "File sizes:"
-          du -h $PROJECT_NAME-${{ env.TAG_VERSION }}.*
+          du -h $PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.*
 
           # 验证压缩包内容（显示目录结构）
           echo "ZIP contents (first 20 lines):"
