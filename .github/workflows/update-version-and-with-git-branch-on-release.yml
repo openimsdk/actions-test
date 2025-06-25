@@ -1,4 +1,4 @@
-name: Update Version File on Release
+name: Update Version File and with Git branch on Release
 
 on:
   release:
@@ -19,8 +19,8 @@ jobs:
       # Step 2: Set up Git with official account
       - name: Set up Git
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
       # Step 3: Check and delete existing tag
       - name: Check and delete existing tag
