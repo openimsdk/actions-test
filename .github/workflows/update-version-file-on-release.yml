@@ -117,8 +117,8 @@ jobs:
             
             cd temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
             git init
-            # git config user.name "github-actions[bot]"
-            # git config user.email "github-actions[bot]@users.noreply.github.com"
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
             
             # git remote add origin "$REPO_URL"
             
