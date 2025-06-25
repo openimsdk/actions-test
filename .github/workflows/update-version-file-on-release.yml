@@ -81,24 +81,20 @@ jobs:
               core.info("No matching draft release found.");
             }
 
-      # Step 8: Create custom source code packages (只保留当前分支的记录)
+      # Step 8: Create custom source code packages
       - name: Create custom source code packages
         run: |
-          # 获取项目名称
           PROJECT_NAME="${{ github.event.repository.name }}"
           echo "Project name: $PROJECT_NAME"
           echo "Tag version: ${{ env.TAG_VERSION }}"
 
-          # 获取当前分支名（从多个来源尝试）
           CURRENT_BRANCH=""
 
-          # 方法1: 从 GitHub 事件中获取
           if [ ! -z "${{ github.event.release.target_commitish }}" ]; then
             CURRENT_BRANCH="${{ github.event.release.target_commitish }}"
             echo "Branch from release target_commitish: $CURRENT_BRANCH"
           fi
 
-          # 方法2: 从当前 HEAD 获取
           if [ -z "$CURRENT_BRANCH" ]; then
             CURRENT_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
             echo "Branch from git HEAD: $CURRENT_BRANCH"
@@ -108,7 +104,6 @@ jobs:
 
           mkdir -p temp-package
 
-          # 方法1: 尝试直接从远程仓库克隆
           echo "Attempting to clone from remote repository..."
           REPO_URL="https://github.com/${{ github.repository }}.git"
 
@@ -117,26 +112,20 @@ jobs:
           else
             echo "Failed to clone from remote, trying local methods..."
             
-            # 方法2: 创建本地仓库副本
             mkdir -p temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
-            
-            # 复制当前工作目录到临时目录（排除 .git）
             rsync -av --exclude='.git' --exclude='temp-package' . temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}/
             
-            # 进入临时目录并初始化 git
             cd temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
             git init
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
+            # git config user.name "github-actions[bot]"
+            # git config user.email "github-actions[bot]@users.noreply.github.com"
             
-            # 添加当前仓库作为远程源
-            git remote add origin "$REPO_URL"
+            # git remote add origin "$REPO_URL"
             
             # 尝试获取指定分支的历史
             echo "Fetching branch history..."
             if git fetch origin "$CURRENT_BRANCH" 2>/dev/null; then
               echo "Successfully fetched $CURRENT_BRANCH history"
-              # 重置到远程分支的状态
               git reset --hard "origin/$CURRENT_BRANCH"
               git checkout -b "$CURRENT_BRANCH"
             else
@@ -149,10 +138,16 @@ jobs:
             cd ../..
           fi
 
-          # 进入临时目录并清理不需要的文件
           cd temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
 
-          # 显示当前分支信息
+          mkdir -p version
+
+          echo "${{ env.TAG_VERSION }}" > version/version
+
+          echo "Version file content after update:"
+          cat version/version
+
+
           echo "Final git status in package:"
           git branch -a 2>/dev/null || echo "No git branches found"
           git log --oneline -5 2>/dev/null || echo "No git history found"
@@ -164,16 +159,13 @@ jobs:
 
           tar -czf ../$PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.tar.gz $PROJECT_NAME-${{ env.TAG_VERSION }}/
 
-          # 返回工作目录
           cd ..
 
-          # 验证文件已创建
           echo "Created files:"
           ls -la $PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.*
           echo "File sizes:"
           du -h $PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.*
 
-          # 验证压缩包内容（显示目录结构）
           echo "ZIP contents (first 20 lines):"
           unzip -l $PROJECT_NAME-${{ env.TAG_VERSION }}.zip | head -20
           echo "TAR.GZ contents (first 20 lines):"
