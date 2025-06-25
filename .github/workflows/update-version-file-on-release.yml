@@ -106,63 +106,84 @@ jobs:
 
           echo "Final branch to use: $CURRENT_BRANCH"
 
-          # 显示当前 git 状态以便调试
-          # echo "Current git status for debugging:"
-          # git branch -a
-          # git remote -v
-          # echo "Current commit: $(git rev-parse HEAD)"
-
           # 创建临时目录用于打包
           mkdir -p temp-package
 
-          # 方法1: 尝试直接从远程仓库克隆
-          echo "Attempting to clone from remote repository..."
+          # 尝试直接从远程仓库克隆单个分支（不包含其他分支和标签）
+          echo "Attempting to clone single branch from remote repository..."
           REPO_URL="https://github.com/${{ github.repository }}.git"
 
-          if git clone --single-branch --branch "$CURRENT_BRANCH" "$REPO_URL" temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }} 2>/dev/null; then
-            echo "Successfully cloned branch $CURRENT_BRANCH from remote"
+          if git clone --single-branch --branch "$CURRENT_BRANCH" --no-tags "$REPO_URL" temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }} 2>/dev/null; then
+            echo "Successfully cloned single branch $CURRENT_BRANCH from remote (without tags)"
+          elif git clone --single-branch --branch "$CURRENT_BRANCH" "$REPO_URL" temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }} 2>/dev/null; then
+            echo "Successfully cloned single branch $CURRENT_BRANCH from remote (with tags)"
+            # 如果包含了标签，我们可以选择性地清理
+            cd temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
+            echo "Cleaning unwanted tags..."
+            # 只保留当前标签，删除其他标签
+            git tag -l | grep -v "^${{ env.TAG_VERSION }}$" | xargs -r git tag -d
+            cd ../..
           else
             echo "Failed to clone from remote, trying local methods..."
             
-            # 方法2: 创建本地仓库副本
-            mkdir -p temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
+            # 备用方法: 使用 git worktree 创建干净的工作树
+            TEMP_WORKTREE="temp-worktree-$RANDOM"
+            echo "Creating worktree for branch $CURRENT_BRANCH..."
             
-            # 复制当前工作目录到临时目录（排除 .git）
-            rsync -av --exclude='.git' --exclude='temp-package' . temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}/
-            
-            # 进入临时目录并初始化 git
-            cd temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
-            git init
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            
-            # 添加当前仓库作为远程源
-            git remote add origin "$REPO_URL"
-            
-            # 尝试获取指定分支的历史
-            echo "Fetching branch history..."
-            if git fetch origin "$CURRENT_BRANCH" 2>/dev/null; then
-              echo "Successfully fetched $CURRENT_BRANCH history"
-              # 重置到远程分支的状态
-              git reset --hard "origin/$CURRENT_BRANCH"
-              git checkout -b "$CURRENT_BRANCH"
-            else
-              echo "Could not fetch remote history, creating new history"
-              git add .
-              git commit -m "Source code for release ${{ env.TAG_VERSION }}"
-              git checkout -b "$CURRENT_BRANCH"
+            if git worktree add "$TEMP_WORKTREE" "$CURRENT_BRANCH" 2>/dev/null; then
+              echo "Successfully created worktree"
+              
+              # 复制 worktree 内容到目标目录
+              mkdir -p temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
+              cp -r "$TEMP_WORKTREE"/.git temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}/
+              rsync -av --exclude='.git' "$TEMP_WORKTREE"/ temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}/
+              
+              # 清理 worktree
+              git worktree remove "$TEMP_WORKTREE" --force
+              
+              # 进入目标目录并清理不需要的引用
+              cd temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
+              git config user.name "github-actions[bot]"
+              git config user.email "github-actions[bot]@users.noreply.github.com"
+              
+              # 清理所有标签，只保留当前分支的历史
+              git tag -l | xargs -r git tag -d
+              
+              # 清理其他分支的引用
+              git for-each-ref --format='%(refname:short)' refs/remotes | grep -v "origin/$CURRENT_BRANCH" | xargs -r -I {} git branch -rd {}
+              
+              cd ../..
+            # else
+            #   echo "Worktree method failed, using rsync method..."
+              
+            #   # 最后备用方法: 复制当前状态并创建新的 git 历史
+            #   mkdir -p temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
+            #   rsync -av --exclude='.git' --exclude='temp-package' . temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}/
+              
+            #   cd temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
+            #   git init
+            #   git config user.name "github-actions[bot]"
+            #   git config user.email "github-actions[bot]@users.noreply.github.com"
+            #   git add .
+            #   git commit -m "Source code for release ${{ env.TAG_VERSION }}"
+            #   git checkout -b "$CURRENT_BRANCH"
+              
+            #   cd ../..
             fi
-            
-            cd ../..
           fi
 
-          # 进入临时目录并清理不需要的文件
+          # 进入临时目录验证和清理
           cd temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
 
-          # 显示当前分支信息
+          # 显示最终的 git 状态
           echo "Final git status in package:"
+          echo "Branches:"
           git branch -a 2>/dev/null || echo "No git branches found"
+          echo "Tags:"
+          git tag -l 2>/dev/null || echo "No git tags found"
+          echo "Recent commits:"
           git log --oneline -5 2>/dev/null || echo "No git history found"
+          echo "Remotes:"
           git remote -v 2>/dev/null || echo "No remotes found"
 
           # 返回上级目录准备打包
@@ -176,6 +197,9 @@ jobs:
 
           # 返回工作目录
           cd ..
+
+          # 清理临时目录
+          rm -rf temp-package
 
           # 验证文件已创建
           echo "Created files:"
