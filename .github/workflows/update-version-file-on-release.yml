@@ -146,6 +146,9 @@ jobs:
           echo "Version file content after update:"
           cat version/version
 
+          git add .
+          git commit -m "Update version to ${{ env.TAG_VERSION }}"
+
           echo "Removing all remotes..."
           git remote | xargs -r git remote remove
 
