@@ -146,6 +146,8 @@ jobs:
           echo "Version file content after update:"
           cat version/version
 
+          echo "Removing all remotes..."
+          git remote | xargs -r git remote remove
 
           echo "Final git status in package:"
           git branch -a 2>/dev/null || echo "No git branches found"
