@@ -84,6 +84,11 @@ jobs:
       # Step 8: Create custom source code packages (只保留当前分支的记录)
       - name: Create custom source code packages
         run: |
+          # 获取项目名称
+          PROJECT_NAME="${{ github.event.repository.name }}"
+          echo "Project name: $PROJECT_NAME"
+          echo "Tag version: ${{ env.TAG_VERSION }}"
+
           # 获取当前分支名（从多个来源尝试）
           CURRENT_BRANCH=""
 
@@ -99,19 +104,13 @@ jobs:
             echo "Branch from git HEAD: $CURRENT_BRANCH"
           fi
 
-          # 方法3: 默认使用 main
-          if [ -z "$CURRENT_BRANCH" ] || [ "$CURRENT_BRANCH" = "HEAD" ]; then
-            CURRENT_BRANCH="main"
-            echo "Using default branch: $CURRENT_BRANCH"
-          fi
-
           echo "Final branch to use: $CURRENT_BRANCH"
 
           # 显示当前 git 状态以便调试
-          echo "Current git status for debugging:"
-          git branch -a
-          git remote -v
-          echo "Current commit: $(git rev-parse HEAD)"
+          # echo "Current git status for debugging:"
+          # git branch -a
+          # git remote -v
+          # echo "Current commit: $(git rev-parse HEAD)"
 
           # 创建临时目录用于打包
           mkdir -p temp-package
@@ -119,20 +118,20 @@ jobs:
           # 方法1: 尝试直接从远程仓库克隆
           echo "Attempting to clone from remote repository..."
           REPO_URL="https://github.com/${{ github.repository }}.git"
-          
-          if git clone --single-branch --branch "$CURRENT_BRANCH" "$REPO_URL" temp-package/source-with-history 2>/dev/null; then
+
+          if git clone --single-branch --branch "$CURRENT_BRANCH" "$REPO_URL" temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }} 2>/dev/null; then
             echo "Successfully cloned branch $CURRENT_BRANCH from remote"
           else
             echo "Failed to clone from remote, trying local methods..."
             
             # 方法2: 创建本地仓库副本
-            mkdir -p temp-package/source-with-history
+            mkdir -p temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
             
             # 复制当前工作目录到临时目录（排除 .git）
-            rsync -av --exclude='.git' --exclude='temp-package' . temp-package/source-with-history/
+            rsync -av --exclude='.git' --exclude='temp-package' . temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}/
             
             # 进入临时目录并初始化 git
-            cd temp-package/source-with-history
+            cd temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
             git init
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -147,14 +146,6 @@ jobs:
               # 重置到远程分支的状态
               git reset --hard "origin/$CURRENT_BRANCH"
               git checkout -b "$CURRENT_BRANCH"
-            elif git fetch origin main 2>/dev/null; then
-              echo "Fetched main branch history as fallback"
-              git reset --hard origin/main
-              git checkout -b "$CURRENT_BRANCH"
-            elif git fetch origin master 2>/dev/null; then
-              echo "Fetched master branch history as fallback"
-              git reset --hard origin/master
-              git checkout -b "$CURRENT_BRANCH"
             else
               echo "Could not fetch remote history, creating new history"
               git add .
@@ -166,10 +157,7 @@ jobs:
           fi
 
           # 进入临时目录并清理不需要的文件
-          cd temp-package/source-with-history
-
-          # 移除可能的大文件或不需要的目录（可选）
-          # rm -rf .github/workflows/*.yml  # 如果不想包含工作流文件
+          cd temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
 
           # 显示当前分支信息
           echo "Final git status in package:"
@@ -181,28 +169,25 @@ jobs:
           cd ..
 
           # 创建包含完整分支历史的 ZIP 压缩包
-          zip -r ../custom-source-with-history-${{ env.TAG_VERSION }}.zip source-with-history/
+          zip -r ../$PROJECT_NAME-${{ env.TAG_VERSION }}.zip $PROJECT_NAME-${{ env.TAG_VERSION }}/
 
           # 创建包含完整分支历史的 TAR.GZ 压缩包  
-          tar -czf ../custom-source-with-history-${{ env.TAG_VERSION }}.tar.gz source-with-history/
+          tar -czf ../$PROJECT_NAME-${{ env.TAG_VERSION }}.tar.gz $PROJECT_NAME-${{ env.TAG_VERSION }}/
 
           # 返回工作目录
           cd ..
 
-          # 清理临时目录
-          rm -rf temp-package
-
           # 验证文件已创建
           echo "Created files:"
-          ls -la custom-source-with-history-*
+          ls -la $PROJECT_NAME-${{ env.TAG_VERSION }}.*
           echo "File sizes:"
-          du -h custom-source-with-history-*
+          du -h $PROJECT_NAME-${{ env.TAG_VERSION }}.*
 
           # 验证压缩包内容（显示目录结构）
           echo "ZIP contents (first 20 lines):"
-          unzip -l custom-source-with-history-${{ env.TAG_VERSION }}.zip | head -20
+          unzip -l $PROJECT_NAME-${{ env.TAG_VERSION }}.zip | head -20
           echo "TAR.GZ contents (first 20 lines):"
-          tar -tzf custom-source-with-history-${{ env.TAG_VERSION }}.tar.gz | head -20
+          tar -tzf $PROJECT_NAME-${{ env.TAG_VERSION }}.tar.gz | head -20
 
       # Step 9: 直接使用当前 release 信息并上传文件
       - name: Upload custom source packages to existing release
@@ -210,10 +195,9 @@ jobs:
         with:
           tag_name: ${{ env.TAG_VERSION }}
           files: |
-            custom-source-with-history-${{ env.TAG_VERSION }}.zip
-            custom-source-with-history-${{ env.TAG_VERSION }}.tar.gz
+            ${{ github.event.repository.name }}-${{ env.TAG_VERSION }}.zip
+            ${{ github.event.repository.name }}-${{ env.TAG_VERSION }}.tar.gz
           append_body: true
           fail_on_unmatched_files: true
-          # 不设置 overwrite，默认为 false，只追加不覆盖
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
