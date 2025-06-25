@@ -119,9 +119,6 @@ jobs:
             git init
             # git config user.name "github-actions[bot]"
             # git config user.email "github-actions[bot]@users.noreply.github.com"
-
-            git config --global user.name "github-actions[bot]"
-            git config --global user.email "github-actions[bot]@users.noreply.github.com"
             
             # git remote add origin "$REPO_URL"
             
@@ -148,6 +145,9 @@ jobs:
 
           echo "Version file content after update:"
           cat version/version
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
           git add .
           git commit -m "Update version to ${{ env.TAG_VERSION }}"
