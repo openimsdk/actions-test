@@ -81,111 +81,111 @@ jobs:
               core.info("No matching draft release found.");
             }
 
-      # Step 8: Create custom source code packages
-      - name: Create custom source code packages
-        run: |
-          PROJECT_NAME="${{ github.event.repository.name }}"
-          echo "Project name: $PROJECT_NAME"
-          echo "Tag version: ${{ env.TAG_VERSION }}"
+      # # Step 8: Create custom source code packages
+      # - name: Create custom source code packages
+      #   run: |
+      #     PROJECT_NAME="${{ github.event.repository.name }}"
+      #     echo "Project name: $PROJECT_NAME"
+      #     echo "Tag version: ${{ env.TAG_VERSION }}"
 
-          CURRENT_BRANCH=""
+      #     CURRENT_BRANCH=""
 
-          if [ ! -z "${{ github.event.release.target_commitish }}" ]; then
-            CURRENT_BRANCH="${{ github.event.release.target_commitish }}"
-            echo "Branch from release target_commitish: $CURRENT_BRANCH"
-          fi
+      #     if [ ! -z "${{ github.event.release.target_commitish }}" ]; then
+      #       CURRENT_BRANCH="${{ github.event.release.target_commitish }}"
+      #       echo "Branch from release target_commitish: $CURRENT_BRANCH"
+      #     fi
 
-          if [ -z "$CURRENT_BRANCH" ]; then
-            CURRENT_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
-            echo "Branch from git HEAD: $CURRENT_BRANCH"
-          fi
+      #     if [ -z "$CURRENT_BRANCH" ]; then
+      #       CURRENT_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
+      #       echo "Branch from git HEAD: $CURRENT_BRANCH"
+      #     fi
 
-          echo "Final branch to use: $CURRENT_BRANCH"
+      #     echo "Final branch to use: $CURRENT_BRANCH"
 
-          mkdir -p temp-package
+      #     mkdir -p temp-package
 
-          echo "Attempting to clone from remote repository..."
-          REPO_URL="https://github.com/${{ github.repository }}.git"
+      #     echo "Attempting to clone from remote repository..."
+      #     REPO_URL="https://github.com/${{ github.repository }}.git"
 
-          if git clone --single-branch --branch "$CURRENT_BRANCH" --no-tags "$REPO_URL" temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }} 2>/dev/null; then
-            echo "Successfully cloned branch $CURRENT_BRANCH from remote"
-          else
-            echo "Failed to clone from remote, trying local methods..."
-            
-            mkdir -p temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
-            rsync -av --exclude='.git' --exclude='temp-package' . temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}/
-            
-            cd temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
-            git init
-            # git config user.name "github-actions[bot]"
-            # git config user.email "github-actions[bot]@users.noreply.github.com"
-            
-            # git remote add origin "$REPO_URL"
-            
-            echo "Fetching branch history..."
-            if git fetch origin "$CURRENT_BRANCH" 2>/dev/null; then
-              echo "Successfully fetched $CURRENT_BRANCH history"
-              git reset --hard "origin/$CURRENT_BRANCH"
-              git checkout -b "$CURRENT_BRANCH"
-            else
-              echo "Could not fetch remote history, creating new history"
-              git add .
-              git commit -m "Source code for release ${{ env.TAG_VERSION }}"
-              git checkout -b "$CURRENT_BRANCH"
-            fi
-            
-            cd ../..
-          fi
+      #     if git clone --single-branch --branch "$CURRENT_BRANCH" --no-tags "$REPO_URL" temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }} 2>/dev/null; then
+      #       echo "Successfully cloned branch $CURRENT_BRANCH from remote"
+      #     else
+      #       echo "Failed to clone from remote, trying local methods..."
 
-          cd temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
+      #       mkdir -p temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
+      #       rsync -av --exclude='.git' --exclude='temp-package' . temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}/
 
-          mkdir -p version
+      #       cd temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
+      #       git init
+      #       # git config user.name "github-actions[bot]"
+      #       # git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          echo "${{ env.TAG_VERSION }}" > version/version
+      #       # git remote add origin "$REPO_URL"
 
-          echo "Version file content after update:"
-          cat version/version
+      #       echo "Fetching branch history..."
+      #       if git fetch origin "$CURRENT_BRANCH" 2>/dev/null; then
+      #         echo "Successfully fetched $CURRENT_BRANCH history"
+      #         git reset --hard "origin/$CURRENT_BRANCH"
+      #         git checkout -b "$CURRENT_BRANCH"
+      #       else
+      #         echo "Could not fetch remote history, creating new history"
+      #         git add .
+      #         git commit -m "Source code for release ${{ env.TAG_VERSION }}"
+      #         git checkout -b "$CURRENT_BRANCH"
+      #       fi
 
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+      #       cd ../..
+      #     fi
 
-          git add .
-          git commit -m "Update version to ${{ env.TAG_VERSION }}"
+      #     cd temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
 
-          echo "Removing all remotes..."
-          git remote | xargs -r git remote remove
+      #     mkdir -p version
 
-          echo "Final git status in package:"
-          git branch -a 2>/dev/null || echo "No git branches found"
-          git log --oneline -5 2>/dev/null || echo "No git history found"
-          git remote -v 2>/dev/null || echo "No remotes found"
+      #     echo "${{ env.TAG_VERSION }}" > version/version
 
-          cd ..
+      #     echo "Version file content after update:"
+      #     cat version/version
 
-          zip -r ../$PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.zip $PROJECT_NAME-${{ env.TAG_VERSION }}/
+      #     git config user.name "github-actions[bot]"
+      #     git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          tar -czf ../$PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.tar.gz $PROJECT_NAME-${{ env.TAG_VERSION }}/
+      #     git add .
+      #     git commit -m "Update version to ${{ env.TAG_VERSION }}"
 
-          cd ..
+      #     echo "Removing all remotes..."
+      #     git remote | xargs -r git remote remove
 
-          echo "Created files:"
-          ls -la $PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.*
-          echo "File sizes:"
-          du -h $PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.*
+      #     echo "Final git status in package:"
+      #     git branch -a 2>/dev/null || echo "No git branches found"
+      #     git log --oneline -5 2>/dev/null || echo "No git history found"
+      #     git remote -v 2>/dev/null || echo "No remotes found"
 
-          echo "ZIP contents (first 20 lines):"
-          unzip -l $PROJECT_NAME-${{ env.TAG_VERSION }}.zip | head -20
-          echo "TAR.GZ contents (first 20 lines):"
-          tar -tzf $PROJECT_NAME-${{ env.TAG_VERSION }}.tar.gz | head -20
+      #     cd ..
 
-      - name: Upload custom source packages to existing release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.TAG_VERSION }}
-          files: |
-            ${{ github.event.repository.name }}-${{ env.TAG_VERSION }}-with-git.zip
-            ${{ github.event.repository.name }}-${{ env.TAG_VERSION }}-with-git.tar.gz
-          append_body: true
-          fail_on_unmatched_files: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      #     zip -r ../$PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.zip $PROJECT_NAME-${{ env.TAG_VERSION }}/
+
+      #     tar -czf ../$PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.tar.gz $PROJECT_NAME-${{ env.TAG_VERSION }}/
+
+      #     cd ..
+
+      #     echo "Created files:"
+      #     ls -la $PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.*
+      #     echo "File sizes:"
+      #     du -h $PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.*
+
+      #     echo "ZIP contents (first 20 lines):"
+      #     unzip -l $PROJECT_NAME-${{ env.TAG_VERSION }}.zip | head -20
+      #     echo "TAR.GZ contents (first 20 lines):"
+      #     tar -tzf $PROJECT_NAME-${{ env.TAG_VERSION }}.tar.gz | head -20
+
+      # - name: Upload custom source packages to existing release
+      #   uses: softprops/action-gh-release@v2
+      #   with:
+      #     tag_name: ${{ env.TAG_VERSION }}
+      #     files: |
+      #       ${{ github.event.repository.name }}-${{ env.TAG_VERSION }}-with-git.zip
+      #       ${{ github.event.repository.name }}-${{ env.TAG_VERSION }}-with-git.tar.gz
+      #     append_body: true
+      #     fail_on_unmatched_files: true
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
