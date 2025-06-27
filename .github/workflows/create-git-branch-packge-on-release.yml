@@ -69,8 +69,8 @@ jobs:
 
           cd ..
 
-          zip -r ../$PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.zip $PROJECT_NAME-${{ env.TAG_VERSION }}/
-          tar -czf ../$PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.tar.gz $PROJECT_NAME-${{ env.TAG_VERSION }}/
+          zip -r ./$PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.zip $PROJECT_NAME-${{ env.TAG_VERSION }}/
+          tar -czf ./$PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.tar.gz $PROJECT_NAME-${{ env.TAG_VERSION }}/
 
           cd ..
 
