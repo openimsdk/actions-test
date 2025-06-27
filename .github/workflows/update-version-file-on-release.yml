@@ -34,6 +34,7 @@ jobs:
       # Step 4: Update version file
       - name: Update version file
         run: |
+          mkdir -p version
           echo "${{ env.TAG_VERSION }}" > version/version
 
       # Step 5: Commit and push changes
@@ -43,7 +44,6 @@ jobs:
         run: |
           git add version/version
           git commit -m "Update version to ${{ env.TAG_VERSION }}"
-          # git push origin HEAD:${{ github.ref }}
 
       # Step 6: Update tag
       - name: Update tag
@@ -57,29 +57,29 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            // Get the list of releases
-            const releases = await github.rest.repos.listReleases({
-              owner: context.repo.owner,
-              repo: context.repo.repo
-            });
+            const { owner, repo } = context.repo;
+            const tagName = process.env.TAG_VERSION;
 
-            // Find the draft release where the title and tag_name are the same
-            const draftRelease = releases.data.find(release => 
-              release.draft && release.name === release.tag_name
-            );
-
-            if (draftRelease) {
-              // Publish the draft release using the release_id
-              await github.rest.repos.updateRelease({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                release_id: draftRelease.id,  // Use release_id
-                draft: false
+            try {
+              const { data: release } = await github.rest.repos.getReleaseByTag({
+                owner,
+                repo,
+                tag: tagName
               });
-
-              core.info(`Draft Release ${draftRelease.tag_name} published successfully.`);
-            } else {
-              core.info("No matching draft release found.");
+              
+              await github.rest.repos.updateRelease({
+                owner,
+                repo,
+                release_id: release.id,
+                draft: false,
+                prerelease: release.prerelease
+              });
+              
+              const status = release.draft ? "was draft" : "was already published";
+              core.info(`Release ${tagName} ensured to be published (${status}).`);
+              
+            } catch (error) {
+              core.warning(`Could not find or update release for tag ${tagName}: ${error.message}`);
             }
 
       # # Step 8: Create custom source code packages
