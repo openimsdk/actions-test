@@ -61,11 +61,27 @@ jobs:
             const tagName = process.env.TAG_VERSION;
 
             try {
-              const { data: release } = await github.rest.repos.getReleaseByTag({
-                owner,
-                repo,
-                tag: tagName
-              });
+              let release;
+              try {
+                const response = await github.rest.repos.getReleaseByTag({
+                  owner,
+                  repo,
+                  tag: tagName
+                });
+                release = response.data;
+              } catch (tagError) {
+                core.info(`Release not found by tag, searching all releases...`);
+                const releases = await github.rest.repos.listReleases({
+                  owner,
+                  repo,
+                  per_page: 100
+                });
+                
+                release = releases.data.find(r => r.tag_name === tagName);
+                if (!release) {
+                  throw new Error(`No release found with tag ${tagName}`);
+                }
+              }
               
               await github.rest.repos.updateRelease({
                 owner,
