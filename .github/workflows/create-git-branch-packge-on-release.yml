@@ -39,7 +39,9 @@ jobs:
           mkdir -p temp-package
 
           echo "Cloning single branch with full history..."
-          git clone --single-branch --branch "$CURRENT_BRANCH" . temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
+          REPO_URL="https://github.com/${{ github.repository }}.git"
+          # git clone --single-branch --branch "$CURRENT_BRANCH" "$REPO_URL" temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
+          gh repo clone ${{ github.repository }} temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }} -- --single-branch --branch "$CURRENT_BRANCH"
 
           cd temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
 
