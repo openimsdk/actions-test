@@ -1,4 +1,4 @@
-name: Create Branch Package on Release
+name: Create Git Branch Package on Release
 
 on:
   release:
@@ -46,6 +46,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+          # careate version file
           mkdir -p version
           echo "${{ env.TAG_VERSION }}" > version/version
 
