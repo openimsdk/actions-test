@@ -47,7 +47,8 @@ jobs:
           # REPO_URL="https://github.com/${{ github.repository }}.git"
           REPO_URL="https://${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
 
-          git clone --single-branch --branch "$CURRENT_BRANCH" "$REPO_URL" temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
+          # git clone --single-branch --branch "$CURRENT_BRANCH" "$REPO_URL" temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
+          gh repo clone ${{ github.repository }} temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }} -- --single-branch --branch "$CURRENT_BRANCH"
 
           cd temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
 
