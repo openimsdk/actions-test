@@ -39,13 +39,15 @@ jobs:
           mkdir -p temp-package
 
           echo "Cloning single branch with full history..."
-          REPO_URL="https://github.com/${{ github.repository }}.git"
-          git clone --single-branch --branch "$CURRENT_BRANCH" "$REPO_URL" temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
+          git clone --single-branch --branch "$CURRENT_BRANCH" . temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
 
           cd temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Remove remote reference
+          git remote remove origin
 
           # create version file
           mkdir -p version
@@ -57,15 +59,11 @@ jobs:
           git add version/version
           git commit -m "Update version to ${{ env.TAG_VERSION }}"
 
-          # Remove remote reference
-          git remote remove origin
-
-          git tag | xargs -r git tag -d
-
           echo "Final git status in package:"
           git branch -a 2>/dev/null || echo "No git branches found"
           git log --oneline -5 2>/dev/null || echo "No git history found"
           git remote -v 2>/dev/null || echo "No remotes found"
+          git tag 2>/dev/null || echo "No tags found"
 
           cd ..
 
