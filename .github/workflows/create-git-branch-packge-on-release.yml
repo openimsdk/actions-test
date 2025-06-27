@@ -38,27 +38,27 @@ jobs:
 
           mkdir -p temp-package
 
-          echo "Creating package from current state..."
-          mkdir -p temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
-
-          rsync -av --exclude='.git' --exclude='temp-package' . temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}/
+          echo "Cloning single branch with full history..."
+          REPO_URL="https://github.com/${{ github.repository }}.git"
+          git clone --single-branch --branch "$CURRENT_BRANCH" "$REPO_URL" temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
 
           cd temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
 
-          git init --initial-branch="$CURRENT_BRANCH"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # careate version file
+          # create version file
           mkdir -p version
           echo "${{ env.TAG_VERSION }}" > version/version
 
           echo "Version file content after update:"
           cat version/version
 
-          git add .
-          git commit -m "Source code for release ${{ env.TAG_VERSION }}"
-          # git checkout -b "$CURRENT_BRANCH"
+          git add version/version
+          git commit -m "Update version to ${{ env.TAG_VERSION }}"
+
+          # Remove remote reference
+          git remote remove origin
 
           echo "Final git status in package:"
           git branch -a 2>/dev/null || echo "No git branches found"
