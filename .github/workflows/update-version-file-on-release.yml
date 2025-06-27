@@ -43,7 +43,7 @@ jobs:
         run: |
           git add version/version
           git commit -m "Update version to ${{ env.TAG_VERSION }}"
-          git push origin HEAD:${{ github.ref }}
+          # git push origin HEAD:${{ github.ref }}
 
       # Step 6: Update tag
       - name: Update tag
