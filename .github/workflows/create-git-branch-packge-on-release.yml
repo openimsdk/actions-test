@@ -68,8 +68,21 @@ jobs:
           git remote -v 2>/dev/null || echo "No remotes found"
 
           cd ..
+
           zip -r ../$PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.zip $PROJECT_NAME-${{ env.TAG_VERSION }}/
           tar -czf ../$PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.tar.gz $PROJECT_NAME-${{ env.TAG_VERSION }}/
+
+          cd ..
+
+          echo "Created files:"
+          ls -la $PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.*
+          echo "File sizes:"
+          du -h $PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.*
+
+          # echo "ZIP contents (first 20 lines):"
+          # unzip -l $PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.zip | head -20
+          # echo "TAR.GZ contents (first 20 lines):"
+          # tar -tzf $PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.tar.gz | head -20
 
       - name: Upload custom source packages to existing release
         uses: softprops/action-gh-release@v2
