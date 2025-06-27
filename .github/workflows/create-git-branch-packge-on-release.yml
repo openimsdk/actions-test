@@ -40,10 +40,12 @@ jobs:
 
           echo "Creating package from current state..."
           mkdir -p temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
+
           rsync -av --exclude='.git' --exclude='temp-package' . temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}/
 
           cd temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
-          git init
+
+          git init --initial-branch="$CURRENT_BRANCH"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
@@ -56,7 +58,7 @@ jobs:
 
           git add .
           git commit -m "Source code for release ${{ env.TAG_VERSION }}"
-          git checkout -b "$CURRENT_BRANCH"
+          # git checkout -b "$CURRENT_BRANCH"
 
           echo "Final git status in package:"
           git branch -a 2>/dev/null || echo "No git branches found"
@@ -74,6 +76,11 @@ jobs:
           ls -la $PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.*
           echo "File sizes:"
           du -h $PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.*
+
+          # echo "ZIP contents (first 20 lines):"
+          # unzip -l $PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.zip | head -20
+          # echo "TAR.GZ contents (first 20 lines):"
+          # tar -tzf $PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.tar.gz | head -20
 
       - name: Upload custom source packages to existing release
         uses: softprops/action-gh-release@v2
