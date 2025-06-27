@@ -60,17 +60,16 @@ jobs:
           # Remove remote reference
           git remote remove origin
 
+          git tag | xargs -r git tag -d
+
           echo "Final git status in package:"
           git branch -a 2>/dev/null || echo "No git branches found"
           git log --oneline -5 2>/dev/null || echo "No git history found"
           git remote -v 2>/dev/null || echo "No remotes found"
 
           cd ..
-
           zip -r ../$PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.zip $PROJECT_NAME-${{ env.TAG_VERSION }}/
           tar -czf ../$PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.tar.gz $PROJECT_NAME-${{ env.TAG_VERSION }}/
-
-          cd ..
 
           echo "Created files:"
           ls -la $PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.*
