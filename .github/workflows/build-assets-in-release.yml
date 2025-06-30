@@ -12,165 +12,52 @@ jobs:
         include:
           - os: ubuntu-latest
             arch: amd64
-            platform: linux
-            build: BuildLinux
           - os: ubuntu-latest
             arch: arm64
-            platform: linux
-            build: BuildLinux
           - os: macos-latest
             arch: amd64
-            platform: darwin
-            build: BuildIOS
           - os: macos-latest
             arch: arm64
-            platform: darwin
-            build: BuildIOS
           - os: windows-latest
             arch: amd64
-            platform: windows
-            build: BuildWindows
           - os: windows-latest
             arch: 386
-            platform: windows
-            build: BuildWindows
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Go environment
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.22"
-
-      - name: Install Mage
-        run: go install github.com/magefile/mage@latest
-
-      - name: Create simple magefile for testing
+      # ============== 模拟构建步骤 (用于测试) ==============
+      # 这部分只是为了模拟生成文件，实际使用时请替换为您的真实构建步骤
+      - name: Create mock build files for testing
         run: |
-          cat > magefile.go << 'EOF'
-          //go:build mage
-          // +build mage
-
-          package main
-
-          import (
-              "fmt"
-              "os"
-              "os/exec"
-              "runtime"
-          )
-
-          var (
-              soName  = "libopenimsdk"
-              outPath = "./shared/"
-              goSrc   = "go"
-          )
-
-          func BuildLinux() error {
-              fmt.Println("Building for Linux...")
-              
-              arch := os.Getenv("GOARCH")
-              if len(arch) == 0 {
-                  arch = runtime.GOARCH
-              }
-              
-              outputDir := outPath + "linux"
-              os.MkdirAll(outputDir, 0755)
-              
-              cmd := exec.Command("go", "build", "-o", outputDir+"/"+soName+"-linux-"+arch, ".")
-              cmd.Dir = goSrc
-              cmd.Env = append(os.Environ(), 
-                  "GOOS=linux",
-                  "GOARCH="+arch,
-                  "CGO_ENABLED=0",
-              )
-              cmd.Stderr = os.Stderr
-              cmd.Stdout = os.Stdout
-              
-              return cmd.Run()
-          }
-
-          func BuildIOS() error {
-              fmt.Println("Building for Darwin...")
-              
-              arch := os.Getenv("GOARCH")
-              if len(arch) == 0 {
-                  arch = runtime.GOARCH
-              }
-              
-              outputDir := outPath + "ios"
-              os.MkdirAll(outputDir, 0755)
-              
-              cmd := exec.Command("go", "build", "-o", outputDir+"/"+soName+"-darwin-"+arch, ".")
-              cmd.Dir = goSrc
-              cmd.Env = append(os.Environ(),
-                  "GOOS=darwin",
-                  "GOARCH="+arch,
-                  "CGO_ENABLED=0",
-              )
-              cmd.Stderr = os.Stderr
-              cmd.Stdout = os.Stdout
-              
-              return cmd.Run()
-          }
-
-          func BuildWindows() error {
-              fmt.Println("Building for Windows...")
-              
-              arch := os.Getenv("GOARCH")
-              if len(arch) == 0 {
-                  arch = runtime.GOARCH
-              }
-              
-              outputDir := outPath + "windows"
-              os.MkdirAll(outputDir, 0755)
-              
-              cmd := exec.Command("go", "build", "-o", outputDir+"/"+soName+"-windows-"+arch+".exe", ".")
-              cmd.Dir = goSrc
-              cmd.Env = append(os.Environ(),
-                  "GOOS=windows", 
-                  "GOARCH="+arch,
-                  "CGO_ENABLED=0",
-              )
-              cmd.Stderr = os.Stderr
-              cmd.Stdout = os.Stdout
-              
-              return cmd.Run()
-          }
-          EOF
-
-      - name: Create simple Go program
-        run: |
-          mkdir -p go
-          cat > go/main.go << 'EOF'
-          package main
-
-          import (
-              "fmt"
-              "runtime"
-              "time"
-          )
-
-          func main() {
-              fmt.Printf("Hello from OpenIM SDK!\n")
-              fmt.Printf("Platform: %s/%s\n", runtime.GOOS, runtime.GOARCH)
-              fmt.Printf("Build time: %s\n", time.Now().Format("2006-01-02 15:04:05"))
-          }
-          EOF
-
-      - name: Setup cross-compilation for ARM64 on Linux
-        if: matrix.arch == 'arm64' && matrix.os == 'ubuntu-latest'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
-
-      - name: Build for ${{ matrix.platform }} ${{ matrix.arch }}
-        env:
-          GOARCH: ${{ matrix.arch }}
-        run: |
-          mage ${{ matrix.build }}
+          # 确定目标文件夹名称 (与原配置保持一致)
+          if [ "${{ matrix.os }}" = "macos-latest" ]; then
+            folder_name="ios"
+          elif [ "${{ matrix.os }}" = "windows-latest" ]; then
+            folder_name="windows"
+          else
+            folder_name="linux"
+          fi
+          
+          # 创建模拟构建文件
+          mkdir -p shared/$folder_name
+          
+          # 模拟生成的文件 (您可以根据实际需要调整文件名和内容)
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            echo "Mock Windows binary for ${{ matrix.arch }}" > shared/$folder_name/libopenimsdk-${{ matrix.arch }}.dll
+            echo "Mock Windows header" > shared/$folder_name/libopenimsdk.h
+          elif [ "${{ matrix.os }}" = "macos-latest" ]; then
+            echo "Mock macOS binary for ${{ matrix.arch }}" > shared/$folder_name/libopenimsdk-${{ matrix.arch }}.dylib
+            echo "Mock macOS header" > shared/$folder_name/libopenimsdk.h
+          else
+            echo "Mock Linux binary for ${{ matrix.arch }}" > shared/$folder_name/libopenimsdk-${{ matrix.arch }}.so
+            echo "Mock Linux header" > shared/$folder_name/libopenimsdk.h
+          fi
+          
+          echo "Created mock files in shared/$folder_name"
+          ls -la shared/$folder_name
+      # ============== 模拟构建步骤结束 ==============
 
       - name: List built files
         run: |
@@ -180,7 +67,7 @@ jobs:
 
       - name: Create archive
         run: |
-          # 确定文件夹名称
+          # 确定文件夹名称 (与原配置的路径逻辑完全一致)
           if [ "${{ matrix.os }}" = "macos-latest" ]; then
             folder_name="ios"
           elif [ "${{ matrix.os }}" = "windows-latest" ]; then
@@ -193,22 +80,24 @@ jobs:
           
           if [ -d "shared/$folder_name" ] && [ "$(find shared/$folder_name -type f | wc -l)" -gt 0 ]; then
             cd shared
+            # 使用与原配置相同的命名格式
             if [ "${{ matrix.os }}" = "windows-latest" ]; then
-              zip -r ../libopenimsdk-${{ matrix.os }}-${{ matrix.arch }}.zip $folder_name/
+              zip -r ../${{ matrix.os }}-${{ matrix.arch }}-assets.zip $folder_name/
             else
-              tar -czf ../libopenimsdk-${{ matrix.os }}-${{ matrix.arch }}.tar.gz $folder_name/
+              tar -czf ../${{ matrix.os }}-${{ matrix.arch }}-assets.tar.gz $folder_name/
             fi
             cd ..
             echo "Created archive for $folder_name"
+            ls -la ${{ matrix.os }}-${{ matrix.arch }}-assets.*
           else
             echo "No files found in shared/$folder_name"
             exit 1
           fi
 
       - name: Upload to release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
-          files: libopenimsdk-${{ matrix.os }}-${{ matrix.arch }}.*
+          files: ${{ matrix.os }}-${{ matrix.arch }}-assets.*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ############
