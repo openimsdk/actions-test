@@ -68,7 +68,6 @@ jobs:
           echo "Created mock files in $archive_name"
           ls -la $archive_name
       # ============== 模拟构建步骤结束 ==============
-
       - name: List built files (Windows)
         if: runner.os == 'Windows'
         run: |
@@ -92,7 +91,7 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           $archive_name = "${{ matrix.os }}-${{ matrix.arch }}-assets"
-          
+
           if (Test-Path $archive_name) {
             $fileCount = (Get-ChildItem -Path $archive_name -File -Recurse).Count
             if ($fileCount -gt 0) {
@@ -112,7 +111,7 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           archive_name="${{ matrix.os }}-${{ matrix.arch }}-assets"
-          
+
           if [ -d "$archive_name" ] && [ "$(find $archive_name -type f | wc -l)" -gt 0 ]; then
             zip -r $archive_name.zip $archive_name/
             echo "Created archive: $archive_name.zip"
@@ -126,6 +125,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ matrix.os }}-${{ matrix.arch }}-assets.zip
+          draft: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ############
