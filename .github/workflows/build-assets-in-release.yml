@@ -35,17 +35,29 @@ jobs:
 
       # ============== 模拟构建步骤 (用于测试) ==============
       # 这部分只是为了模拟生成文件，实际使用时请替换为您的真实构建步骤
-      - name: Create mock build files for testing
+      - name: Create mock build files for testing (Windows)
+        if: runner.os == 'Windows'
         run: |
-          # 直接使用固定的文件夹名格式
+          $archive_name = "${{ matrix.os }}-${{ matrix.arch }}-assets"
+          New-Item -ItemType Directory -Path $archive_name -Force
+
+          if ("${{ matrix.arch }}" -eq "amd64") {
+            "Mock Windows binary for ${{ matrix.arch }}" | Out-File -FilePath "$archive_name/libopenimsdk-${{ matrix.arch }}.dll"
+          } else {
+            "Mock Windows binary for ${{ matrix.arch }}" | Out-File -FilePath "$archive_name/libopenimsdk-${{ matrix.arch }}.dll"
+          }
+          "Mock Windows header" | Out-File -FilePath "$archive_name/libopenimsdk.h"
+
+          Write-Host "Created mock files in $archive_name"
+          Get-ChildItem -Path $archive_name
+
+      - name: Create mock build files for testing (Unix)
+        if: runner.os != 'Windows'
+        run: |
           archive_name="${{ matrix.os }}-${{ matrix.arch }}-assets"
           mkdir -p $archive_name
 
-          # 模拟生成的文件 (您可以根据实际需要调整文件名和内容)
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            echo "Mock Windows binary for ${{ matrix.arch }}" > $archive_name/libopenimsdk-${{ matrix.arch }}.dll
-            echo "Mock Windows header" > $archive_name/libopenimsdk.h
-          elif [ "${{ matrix.os }}" = "macos-latest" ]; then
+          if [ "${{ matrix.os }}" = "macos-latest" ]; then
             echo "Mock macOS binary for ${{ matrix.arch }}" > $archive_name/libopenimsdk-${{ matrix.arch }}.dylib
             echo "Mock macOS header" > $archive_name/libopenimsdk.h
           else
@@ -57,14 +69,47 @@ jobs:
           ls -la $archive_name
       # ============== 模拟构建步骤结束 ==============
 
-      - name: List built files
+      - name: List built files (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          $archive_name = "${{ matrix.os }}-${{ matrix.arch }}-assets"
+          Write-Host "Checking directory: $archive_name"
+          if (Test-Path $archive_name) {
+            Get-ChildItem -Path $archive_name -Recurse
+          } else {
+            Write-Host "Directory $archive_name not found"
+          }
+
+      - name: List built files (Unix)
+        if: runner.os != 'Windows'
         run: |
           archive_name="${{ matrix.os }}-${{ matrix.arch }}-assets"
           echo "Checking directory: $archive_name"
           ls -la $archive_name || echo "Directory $archive_name not found"
           find $archive_name -type f || echo "No files found in $archive_name"
 
-      - name: Create archive
+      - name: Create archive (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          $archive_name = "${{ matrix.os }}-${{ matrix.arch }}-assets"
+          
+          if (Test-Path $archive_name) {
+            $fileCount = (Get-ChildItem -Path $archive_name -File -Recurse).Count
+            if ($fileCount -gt 0) {
+              Compress-Archive -Path "$archive_name/*" -DestinationPath "$archive_name.zip" -Force
+              Write-Host "Created archive: $archive_name.zip"
+              Get-Item "$archive_name.zip"
+            } else {
+              Write-Host "No files found in $archive_name"
+              exit 1
+            }
+          } else {
+            Write-Host "Directory $archive_name not found"
+            exit 1
+          }
+
+      - name: Create archive (Unix)
+        if: runner.os != 'Windows'
         run: |
           archive_name="${{ matrix.os }}-${{ matrix.arch }}-assets"
           
