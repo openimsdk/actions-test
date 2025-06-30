@@ -1,0 +1,276 @@
+name: Build assets in release
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            arch: amd64
+            platform: linux
+            build: BuildLinux
+          - os: ubuntu-latest
+            arch: arm64
+            platform: linux
+            build: BuildLinux
+          - os: macos-latest
+            arch: amd64
+            platform: darwin
+            build: BuildIOS
+          - os: macos-latest
+            arch: arm64
+            platform: darwin
+            build: BuildIOS
+          - os: windows-latest
+            arch: amd64
+            platform: windows
+            build: BuildWindows
+          - os: windows-latest
+            arch: 386
+            platform: windows
+            build: BuildWindows
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go environment
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Install Mage
+        run: go install github.com/magefile/mage@latest
+
+      - name: Create simple magefile for testing
+        run: |
+          mkdir -p go
+          cat > magefile.go << 'EOF'
+          //go:build mage
+          // +build mage
+
+          package main
+
+          import (
+              "fmt"
+              "os"
+              "os/exec"
+              "runtime"
+          )
+
+          var (
+              soName  = "libopenimsdk"
+              outPath = "./shared/"
+              goSrc   = "go"
+          )
+
+          func BuildLinux() error {
+              fmt.Println("Building for Linux...")
+              
+              arch := os.Getenv("GOARCH")
+              if len(arch) == 0 {
+                  arch = runtime.GOARCH
+              }
+              
+              outputDir := outPath + "linux"
+              os.MkdirAll(outputDir, 0755)
+              
+              os.Setenv("GOOS", "linux")
+              os.Setenv("GOARCH", arch)
+              os.Setenv("CGO_ENABLED", "0")
+              
+              cmd := exec.Command("go", "build", "-o", outputDir+"/"+soName+"-linux-"+arch, ".")
+              cmd.Dir = goSrc
+              cmd.Env = os.Environ()
+              cmd.Stderr = os.Stderr
+              cmd.Stdout = os.Stdout
+              
+              return cmd.Run()
+          }
+
+          func BuildIOS() error {
+              fmt.Println("Building for Darwin...")
+              
+              arch := os.Getenv("GOARCH")
+              if len(arch) == 0 {
+                  arch = runtime.GOARCH
+              }
+              
+              outputDir := outPath + "ios"
+              os.MkdirAll(outputDir, 0755)
+              
+              os.Setenv("GOOS", "darwin")
+              os.Setenv("GOARCH", arch)
+              os.Setenv("CGO_ENABLED", "0")
+              
+              cmd := exec.Command("go", "build", "-o", outputDir+"/"+soName+"-darwin-"+arch, ".")
+              cmd.Dir = goSrc
+              cmd.Env = os.Environ()
+              cmd.Stderr = os.Stderr
+              cmd.Stdout = os.Stdout
+              
+              return cmd.Run()
+          }
+
+          func BuildWindows() error {
+              fmt.Println("Building for Windows...")
+              
+              arch := os.Getenv("GOARCH")
+              if len(arch) == 0 {
+                  arch = runtime.GOARCH
+              }
+              
+              outputDir := outPath + "windows"
+              os.MkdirAll(outputDir, 0755)
+              
+              os.Setenv("GOOS", "windows")
+              os.Setenv("GOARCH", arch)
+              os.Setenv("CGO_ENABLED", "0")
+              
+              cmd := exec.Command("go", "build", "-o", outputDir+"/"+soName+"-windows-"+arch+".exe", ".")
+              cmd.Dir = goSrc
+              cmd.Env = os.Environ()
+              cmd.Stderr = os.Stderr
+              cmd.Stdout = os.Stdout
+              
+              return cmd.Run()
+          }
+          EOF
+
+      - name: Create simple Go program
+        run: |
+          mkdir -p go
+          cat > go/main.go << 'EOF'
+          package main
+
+          import (
+              "fmt"
+              "runtime"
+              "time"
+          )
+
+          func main() {
+              fmt.Printf("Hello from OpenIM SDK!\n")
+              fmt.Printf("Platform: %s/%s\n", runtime.GOOS, runtime.GOARCH)
+              fmt.Printf("Build time: %s\n", time.Now().Format("2006-01-02 15:04:05"))
+          }
+          EOF
+
+      - name: Setup cross-compilation for ARM64 on Linux
+        if: matrix.arch == 'arm64' && matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Build for ${{ matrix.platform }} ${{ matrix.arch }}
+        env:
+          GOARCH: ${{ matrix.arch }}
+        run: |
+          mage ${{ matrix.build }}
+
+      - name: Create archive
+        run: |
+          cd shared
+          if [ "${{ matrix.platform }}" = "windows" ]; then
+            zip -r ../libopenimsdk-${{ matrix.platform }}-${{ matrix.arch }}.zip windows/
+          elif [ "${{ matrix.platform }}" = "darwin" ]; then
+            tar -czf ../libopenimsdk-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz ios/
+          else
+            tar -czf ../libopenimsdk-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz linux/
+          fi
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: libopenimsdk-${{ matrix.platform }}-${{ matrix.arch }}.*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+############
+
+# name: Build assets in release
+
+# on:
+#   release:
+#     types: [created]
+
+# jobs:
+#   build:
+#     runs-on: ${{ matrix.os }}
+#     strategy:
+#       matrix:
+#         include:
+#           - os: ubuntu-latest
+#             arch: amd64
+#             build: buildLinux
+#           - os: ubuntu-latest
+#             arch: arm64
+#             build: buildLinux
+#           - os: macos-latest
+#             arch: amd64
+#             build: buildIOS
+#           - os: macos-latest
+#             arch: arm64
+#             build: buildIOS
+#           - os: windows-latest
+#             arch: amd64
+#             build: buildWindows
+#           - os: windows-latest
+#             arch: 386
+#             build: buildWindows
+
+#     steps:
+#       - name: Checkout code
+#         uses: actions/checkout@v4
+
+#       - name: Setup Go environment
+#         uses: actions/setup-go@v5
+#         with:
+#           go-version: "1.22"
+
+#       - name: Check Go version
+#         run: go version
+
+#       - name: Install ARM64 cross-compilation toolchain
+#         if: matrix.arch == 'arm64' && matrix.os == 'ubuntu-latest'
+#         run: |
+#           sudo apt-get update
+#           sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+#           echo "CC=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+#           echo "CXX=aarch64-linux-gnu-g++" >> $GITHUB_ENV
+
+#       - name: Install MinGW-w64 using Chocolatey
+#         if: runner.os == 'Windows' && matrix.arch == '386'
+#         run: |
+#           curl -L -o mingw32.7z https://sourceforge.net/projects/mingw-w64/files/Toolchains%20targetting%20Win32/Personal%20Builds/mingw-builds/8.1.0/threads-posix/dwarf/i686-8.1.0-release-posix-dwarf-rt_v6-rev0.7z/download
+#           7z x mingw32.7z -oC:/mingw32
+
+#       - name: Setup and build on Windows ${{ matrix.arch }}
+#         if: runner.os == 'Windows'
+#         run: |
+#           ./bootstrap_install_mage.bat
+#           $env:GOARCH="${{ matrix.arch }}"
+#           if ($env:GOARCH -eq "386") {
+#             $env:PATH = "C:/mingw32/bin;$env:PATH"
+#             gcc --version
+#             $env:CC="gcc -m32"
+#             $env:CXX="g++ -m32"
+#           }
+#           mage ${{ matrix.build }}
+
+#       - name: Setup and build on ${{ matrix.os }} ${{ matrix.arch }}
+#         if: runner.os != 'Windows'
+#         run: |
+#           sudo bash ./bootstrap_install_mage.sh
+#           export GOARCH=${{ matrix.arch }}
+#           sudo -E mage ${{ matrix.build }}
+
+#       - name: Upload Artifacts
+#         uses: actions/upload-artifact@v4
+#         with:
+#           name: ${{ matrix.os }}-${{ matrix.arch }}-assets
+#           path: shared/${{ (matrix.os == 'macos-latest' && 'ios' || (matrix.os == 'windows-latest' && 'windows' || 'linux')) }}/
