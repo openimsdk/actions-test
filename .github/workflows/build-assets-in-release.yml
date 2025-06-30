@@ -12,16 +12,22 @@ jobs:
         include:
           - os: ubuntu-latest
             arch: amd64
+            build: buildLinux
           - os: ubuntu-latest
             arch: arm64
+            build: buildLinux
           - os: macos-latest
             arch: amd64
+            build: buildIOS
           - os: macos-latest
             arch: arm64
+            build: buildIOS
           - os: windows-latest
             arch: amd64
+            build: buildWindows
           - os: windows-latest
             arch: 386
+            build: buildWindows
 
     steps:
       - name: Checkout code
@@ -39,10 +45,10 @@ jobs:
           else
             folder_name="linux"
           fi
-          
+
           # 创建模拟构建文件
           mkdir -p shared/$folder_name
-          
+
           # 模拟生成的文件 (您可以根据实际需要调整文件名和内容)
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
             echo "Mock Windows binary for ${{ matrix.arch }}" > shared/$folder_name/libopenimsdk-${{ matrix.arch }}.dll
@@ -54,11 +60,10 @@ jobs:
             echo "Mock Linux binary for ${{ matrix.arch }}" > shared/$folder_name/libopenimsdk-${{ matrix.arch }}.so
             echo "Mock Linux header" > shared/$folder_name/libopenimsdk.h
           fi
-          
+
           echo "Created mock files in shared/$folder_name"
           ls -la shared/$folder_name
       # ============== 模拟构建步骤结束 ==============
-
       - name: List built files
         run: |
           echo "Checking shared directory:"
@@ -75,9 +80,9 @@ jobs:
           else
             folder_name="linux"
           fi
-          
+
           echo "Looking for folder: shared/$folder_name"
-          
+
           if [ -d "shared/$folder_name" ] && [ "$(find shared/$folder_name -type f | wc -l)" -gt 0 ]; then
             cd shared
             # 使用与原配置相同的命名格式
