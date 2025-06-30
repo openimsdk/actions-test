@@ -37,72 +37,50 @@ jobs:
       # 这部分只是为了模拟生成文件，实际使用时请替换为您的真实构建步骤
       - name: Create mock build files for testing
         run: |
-          # 确定目标文件夹名称 (与原配置保持一致)
-          if [ "${{ matrix.os }}" = "macos-latest" ]; then
-            folder_name="ios"
-          elif [ "${{ matrix.os }}" = "windows-latest" ]; then
-            folder_name="windows"
-          else
-            folder_name="linux"
-          fi
-
-          # 创建模拟构建文件
-          mkdir -p shared/$folder_name
+          # 直接使用固定的文件夹名格式
+          archive_name="${{ matrix.os }}-${{ matrix.arch }}-assets"
+          mkdir -p $archive_name
 
           # 模拟生成的文件 (您可以根据实际需要调整文件名和内容)
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            echo "Mock Windows binary for ${{ matrix.arch }}" > shared/$folder_name/libopenimsdk-${{ matrix.arch }}.dll
-            echo "Mock Windows header" > shared/$folder_name/libopenimsdk.h
+            echo "Mock Windows binary for ${{ matrix.arch }}" > $archive_name/libopenimsdk-${{ matrix.arch }}.dll
+            echo "Mock Windows header" > $archive_name/libopenimsdk.h
           elif [ "${{ matrix.os }}" = "macos-latest" ]; then
-            echo "Mock macOS binary for ${{ matrix.arch }}" > shared/$folder_name/libopenimsdk-${{ matrix.arch }}.dylib
-            echo "Mock macOS header" > shared/$folder_name/libopenimsdk.h
+            echo "Mock macOS binary for ${{ matrix.arch }}" > $archive_name/libopenimsdk-${{ matrix.arch }}.dylib
+            echo "Mock macOS header" > $archive_name/libopenimsdk.h
           else
-            echo "Mock Linux binary for ${{ matrix.arch }}" > shared/$folder_name/libopenimsdk-${{ matrix.arch }}.so
-            echo "Mock Linux header" > shared/$folder_name/libopenimsdk.h
+            echo "Mock Linux binary for ${{ matrix.arch }}" > $archive_name/libopenimsdk-${{ matrix.arch }}.so
+            echo "Mock Linux header" > $archive_name/libopenimsdk.h
           fi
 
-          echo "Created mock files in shared/$folder_name"
-          ls -la shared/$folder_name
+          echo "Created mock files in $archive_name"
+          ls -la $archive_name
       # ============== 模拟构建步骤结束 ==============
+
       - name: List built files
         run: |
-          echo "Checking shared directory:"
-          ls -la shared/ || echo "shared directory not found"
-          find shared/ -type f || echo "No files found in shared"
+          archive_name="${{ matrix.os }}-${{ matrix.arch }}-assets"
+          echo "Checking directory: $archive_name"
+          ls -la $archive_name || echo "Directory $archive_name not found"
+          find $archive_name -type f || echo "No files found in $archive_name"
 
       - name: Create archive
         run: |
-          # 确定文件夹名称 (与原配置的路径逻辑完全一致)
-          if [ "${{ matrix.os }}" = "macos-latest" ]; then
-            folder_name="ios"
-          elif [ "${{ matrix.os }}" = "windows-latest" ]; then
-            folder_name="windows"
+          archive_name="${{ matrix.os }}-${{ matrix.arch }}-assets"
+          
+          if [ -d "$archive_name" ] && [ "$(find $archive_name -type f | wc -l)" -gt 0 ]; then
+            zip -r $archive_name.zip $archive_name/
+            echo "Created archive: $archive_name.zip"
+            ls -la $archive_name.zip
           else
-            folder_name="linux"
-          fi
-
-          echo "Looking for folder: shared/$folder_name"
-
-          if [ -d "shared/$folder_name" ] && [ "$(find shared/$folder_name -type f | wc -l)" -gt 0 ]; then
-            cd shared
-            # 使用与原配置相同的命名格式
-            if [ "${{ matrix.os }}" = "windows-latest" ]; then
-              zip -r ../${{ matrix.os }}-${{ matrix.arch }}-assets.zip $folder_name/
-            else
-              tar -czf ../${{ matrix.os }}-${{ matrix.arch }}-assets.tar.gz $folder_name/
-            fi
-            cd ..
-            echo "Created archive for $folder_name"
-            ls -la ${{ matrix.os }}-${{ matrix.arch }}-assets.*
-          else
-            echo "No files found in shared/$folder_name"
+            echo "No files found in $archive_name"
             exit 1
           fi
 
       - name: Upload to release
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ matrix.os }}-${{ matrix.arch }}-assets.*
+          files: ${{ matrix.os }}-${{ matrix.arch }}-assets.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ############
