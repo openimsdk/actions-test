@@ -13,21 +13,27 @@ jobs:
           - os: ubuntu-latest
             arch: amd64
             build: buildLinux
+            os_name: ubuntu
           - os: ubuntu-latest
             arch: arm64
             build: buildLinux
+            os_name: ubuntu
           - os: macos-latest
             arch: amd64
             build: buildIOS
+            os_name: macos
           - os: macos-latest
             arch: arm64
             build: buildIOS
+            os_name: macos
           - os: windows-latest
             arch: amd64
             build: buildWindows
+            os_name: windows
           - os: windows-latest
             arch: 386
             build: buildWindows
+            os_name: windows
 
     steps:
       - name: Checkout code
@@ -38,7 +44,8 @@ jobs:
       - name: Create mock build files for testing (Windows)
         if: runner.os == 'Windows'
         run: |
-          $archive_name = "${{ matrix.os }}-${{ matrix.arch }}-assets"
+          $tag_version = "${{ github.ref_name }}"
+          $archive_name = "${{ matrix.os_name }}-${{ matrix.arch }}-$tag_version-assets"
           New-Item -ItemType Directory -Path $archive_name -Force
 
           if ("${{ matrix.arch }}" -eq "amd64") {
@@ -54,7 +61,8 @@ jobs:
       - name: Create mock build files for testing (Unix)
         if: runner.os != 'Windows'
         run: |
-          archive_name="${{ matrix.os }}-${{ matrix.arch }}-assets"
+          tag_version="${{ github.ref_name }}"
+          archive_name="${{ matrix.os_name }}-${{ matrix.arch }}-$tag_version-assets"
           mkdir -p $archive_name
 
           if [ "${{ matrix.os }}" = "macos-latest" ]; then
@@ -68,10 +76,12 @@ jobs:
           echo "Created mock files in $archive_name"
           ls -la $archive_name
       # ============== 模拟构建步骤结束 ==============
+
       - name: List built files (Windows)
         if: runner.os == 'Windows'
         run: |
-          $archive_name = "${{ matrix.os }}-${{ matrix.arch }}-assets"
+          $tag_version = "${{ github.ref_name }}"
+          $archive_name = "${{ matrix.os_name }}-${{ matrix.arch }}-$tag_version-assets"
           Write-Host "Checking directory: $archive_name"
           if (Test-Path $archive_name) {
             Get-ChildItem -Path $archive_name -Recurse
@@ -82,7 +92,8 @@ jobs:
       - name: List built files (Unix)
         if: runner.os != 'Windows'
         run: |
-          archive_name="${{ matrix.os }}-${{ matrix.arch }}-assets"
+          tag_version="${{ github.ref_name }}"
+          archive_name="${{ matrix.os_name }}-${{ matrix.arch }}-$tag_version-assets"
           echo "Checking directory: $archive_name"
           ls -la $archive_name || echo "Directory $archive_name not found"
           find $archive_name -type f || echo "No files found in $archive_name"
@@ -90,7 +101,8 @@ jobs:
       - name: Create archive (Windows)
         if: runner.os == 'Windows'
         run: |
-          $archive_name = "${{ matrix.os }}-${{ matrix.arch }}-assets"
+          $tag_version = "${{ github.ref_name }}"
+          $archive_name = "${{ matrix.os_name }}-${{ matrix.arch }}-$tag_version-assets"
 
           if (Test-Path $archive_name) {
             $fileCount = (Get-ChildItem -Path $archive_name -File -Recurse).Count
@@ -110,7 +122,8 @@ jobs:
       - name: Create archive (Unix)
         if: runner.os != 'Windows'
         run: |
-          archive_name="${{ matrix.os }}-${{ matrix.arch }}-assets"
+          tag_version="${{ github.ref_name }}"
+          archive_name="${{ matrix.os_name }}-${{ matrix.arch }}-$tag_version-assets"
 
           if [ -d "$archive_name" ] && [ "$(find $archive_name -type f | wc -l)" -gt 0 ]; then
             zip -r $archive_name.zip $archive_name/
@@ -124,7 +137,7 @@ jobs:
       - name: Upload to release
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ matrix.os }}-${{ matrix.arch }}-assets.zip
+          files: ${{ matrix.os_name }}-${{ matrix.arch }}-${{ github.ref_name }}-assets.zip
           draft: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
