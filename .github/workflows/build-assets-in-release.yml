@@ -49,7 +49,6 @@ jobs:
 
       - name: Create simple magefile for testing
         run: |
-          mkdir -p go
           cat > magefile.go << 'EOF'
           //go:build mage
           // +build mage
@@ -80,13 +79,13 @@ jobs:
               outputDir := outPath + "linux"
               os.MkdirAll(outputDir, 0755)
               
-              os.Setenv("GOOS", "linux")
-              os.Setenv("GOARCH", arch)
-              os.Setenv("CGO_ENABLED", "0")
-              
               cmd := exec.Command("go", "build", "-o", outputDir+"/"+soName+"-linux-"+arch, ".")
               cmd.Dir = goSrc
-              cmd.Env = os.Environ()
+              cmd.Env = append(os.Environ(), 
+                  "GOOS=linux",
+                  "GOARCH="+arch,
+                  "CGO_ENABLED=0",
+              )
               cmd.Stderr = os.Stderr
               cmd.Stdout = os.Stdout
               
@@ -104,13 +103,13 @@ jobs:
               outputDir := outPath + "ios"
               os.MkdirAll(outputDir, 0755)
               
-              os.Setenv("GOOS", "darwin")
-              os.Setenv("GOARCH", arch)
-              os.Setenv("CGO_ENABLED", "0")
-              
               cmd := exec.Command("go", "build", "-o", outputDir+"/"+soName+"-darwin-"+arch, ".")
               cmd.Dir = goSrc
-              cmd.Env = os.Environ()
+              cmd.Env = append(os.Environ(),
+                  "GOOS=darwin",
+                  "GOARCH="+arch,
+                  "CGO_ENABLED=0",
+              )
               cmd.Stderr = os.Stderr
               cmd.Stdout = os.Stdout
               
@@ -128,13 +127,13 @@ jobs:
               outputDir := outPath + "windows"
               os.MkdirAll(outputDir, 0755)
               
-              os.Setenv("GOOS", "windows")
-              os.Setenv("GOARCH", arch)
-              os.Setenv("CGO_ENABLED", "0")
-              
               cmd := exec.Command("go", "build", "-o", outputDir+"/"+soName+"-windows-"+arch+".exe", ".")
               cmd.Dir = goSrc
-              cmd.Env = os.Environ()
+              cmd.Env = append(os.Environ(),
+                  "GOOS=windows", 
+                  "GOARCH="+arch,
+                  "CGO_ENABLED=0",
+              )
               cmd.Stderr = os.Stderr
               cmd.Stdout = os.Stdout
               
@@ -173,21 +172,43 @@ jobs:
         run: |
           mage ${{ matrix.build }}
 
+      - name: List built files
+        run: |
+          echo "Checking shared directory:"
+          ls -la shared/ || echo "shared directory not found"
+          find shared/ -type f || echo "No files found in shared"
+
       - name: Create archive
         run: |
-          cd shared
-          if [ "${{ matrix.platform }}" = "windows" ]; then
-            zip -r ../libopenimsdk-${{ matrix.platform }}-${{ matrix.arch }}.zip windows/
-          elif [ "${{ matrix.platform }}" = "darwin" ]; then
-            tar -czf ../libopenimsdk-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz ios/
+          # 确定文件夹名称
+          if [ "${{ matrix.os }}" = "macos-latest" ]; then
+            folder_name="ios"
+          elif [ "${{ matrix.os }}" = "windows-latest" ]; then
+            folder_name="windows"
           else
-            tar -czf ../libopenimsdk-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz linux/
+            folder_name="linux"
+          fi
+          
+          echo "Looking for folder: shared/$folder_name"
+          
+          if [ -d "shared/$folder_name" ] && [ "$(find shared/$folder_name -type f | wc -l)" -gt 0 ]; then
+            cd shared
+            if [ "${{ matrix.os }}" = "windows-latest" ]; then
+              zip -r ../libopenimsdk-${{ matrix.os }}-${{ matrix.arch }}.zip $folder_name/
+            else
+              tar -czf ../libopenimsdk-${{ matrix.os }}-${{ matrix.arch }}.tar.gz $folder_name/
+            fi
+            cd ..
+            echo "Created archive for $folder_name"
+          else
+            echo "No files found in shared/$folder_name"
+            exit 1
           fi
 
       - name: Upload to release
         uses: softprops/action-gh-release@v1
         with:
-          files: libopenimsdk-${{ matrix.platform }}-${{ matrix.arch }}.*
+          files: libopenimsdk-${{ matrix.os }}-${{ matrix.arch }}.*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ############
