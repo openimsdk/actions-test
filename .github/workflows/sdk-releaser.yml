@@ -1,0 +1,150 @@
+name: SDK Releaser
+
+on:
+  release:
+    types: [created]
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v4
+        with:
+          java-version: "11"
+          distribution: "temurin"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install NDK
+        run: |
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;20.0.5594570"
+
+      - name: Install gomobile
+        run: |
+          go install golang.org/x/mobile/cmd/gomobile@latest
+          go install golang.org/x/mobile/cmd/gobind@latest
+          gomobile init
+
+      - name: Build Android AAR
+        run: |
+          gomobile bind -v -trimpath -ldflags="-s -w" \
+            -o ./open_im_sdk.aar -target=android \
+            ./open_im_sdk/ ./open_im_sdk_callback/
+
+      - name: Upload Android AAR to Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: open_im_sdk.aar
+          draft: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.21"
+
+      - name: Install gomobile
+        run: |
+          go install golang.org/x/mobile/cmd/gomobile@latest
+          go install golang.org/x/mobile/cmd/gobind@latest
+          gomobile init
+
+      - name: Build iOS xcframework
+        run: |
+          gomobile bind -v -trimpath -ldflags="-s -w" \
+            -o ./OpenIMSDK.xcframework -target=ios \
+            ./open_im_sdk/ ./open_im_sdk_callback/
+
+      - name: Create iOS archive
+        run: |
+          zip -r OpenIMSDK.xcframework.zip OpenIMSDK.xcframework
+
+      - name: Upload iOS xcframework to Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: OpenIMSDK.xcframework.zip
+          draft: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Install make and zip
+        run: sudo apt-get update && sudo apt-get install -y make zip
+
+      - name: Build WASM
+        run: |
+          cd wasm/cmd
+          make wasm
+
+      - name: Create WASM archive
+        run: |
+          cd wasm/cmd
+          # 创建包含wasm文件和运行时的压缩包
+          mkdir -p openIM-wasm
+          cp openIM.wasm openIM-wasm/
+          cp "$(go env GOROOT)/misc/wasm/wasm_exec.js" openIM-wasm/
+          
+          # 创建使用说明
+          cat > openIM-wasm/README.md << EOF
+          # OpenIM WASM
+          
+          This package contains the OpenIM WASM binary and required JavaScript runtime.
+          
+          ## Files
+          - openIM.wasm: The WebAssembly binary
+          - wasm_exec.js: Go WASM runtime (required)
+          
+          ## Usage
+          Include both files in your web application.
+          EOF
+          
+          # 创建压缩包
+          zip -r openIM-wasm.zip openIM-wasm/
+
+      - name: List generated files
+        run: |
+          echo "Generated WASM files:"
+          ls -la wasm/cmd/openIM.wasm
+          ls -la wasm/cmd/openIM-wasm.zip
+          echo "Archive contents:"
+          unzip -l wasm/cmd/openIM-wasm.zip
+
+      - name: Upload WASM files to Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: wasm/cmd/openIM-wasm.zip
+          draft: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
