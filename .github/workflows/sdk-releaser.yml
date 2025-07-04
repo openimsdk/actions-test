@@ -3,9 +3,9 @@ name: SDK Releaser
 on:
   release:
     types: [created]
-  push:
-    tags:
-      - "v*"
+  # push:
+  #   tags:
+  #     - "v*"
   workflow_dispatch:
 
 jobs:
