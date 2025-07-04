@@ -107,8 +107,9 @@ jobs:
 
       - name: Create iOS archive
         run: |
+          cd build
           archive_name="${PROJECT_NAME}_${TAG_VERSION}_iOS_xcframework.zip"
-          zip -r $archive_name build/OpenIMCore.xcframework
+          zip -r ../$archive_name OpenIMCore.xcframework
           echo "Created archive: $archive_name"
 
       - name: Upload iOS xcframework to Release
