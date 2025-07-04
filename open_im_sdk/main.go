@@ -1,17 +1,15 @@
 package open_im_sdk
 
-import "C"
+import (
+	_ "golang.org/x/mobile/bind" // 确保mobile包被保留
+)
 
 // Hello returns a greeting message
-//export Hello
 func Hello(name string) string {
-    return "Hello " + name + " from OpenIM SDK!"
+	return "Hello " + name + " from OpenIM SDK!"
 }
 
 // GetVersion returns the SDK version
-//export GetVersion
 func GetVersion() string {
-    return "1.0.0"
+	return "1.0.0"
 }
-
-func main() {} // Required for gomobile
