@@ -100,24 +100,16 @@ jobs:
 
       - name: Build iOS xcframework
         run: |
-          gomobile bind -v -trimpath -ldflags="-s -w" \
-            -o ./OpenIMSDK.xcframework -target=ios \
-            ./open_im_sdk/ ./open_im_sdk_callback/
+          # gomobile bind -v -trimpath -ldflags="-s -w" \
+          #   -o ./OpenIMSDK.xcframework -target=ios \
+          #   ./open_im_sdk/ ./open_im_sdk_callback/
+          make ios
 
       - name: Create iOS archive
         run: |
           archive_name="${PROJECT_NAME}_${TAG_VERSION}_iOS_xcframework.zip"
           zip -r $archive_name OpenIMSDK.xcframework
           echo "Created archive: $archive_name"
-
-      # - name: List generated files
-      #   run: |
-      #     archive_name="${PROJECT_NAME}_${TAG_VERSION}_iOS_xcframework.zip"
-      #     echo "Generated iOS files:"
-      #     ls -la OpenIMSDK.xcframework
-      #     ls -la $archive_name
-      #     echo "Archive contents:"
-      #     unzip -l $archive_name
 
       - name: Upload iOS xcframework to Release
         uses: softprops/action-gh-release@v2
@@ -155,16 +147,6 @@ jobs:
           archive_name="${PROJECT_NAME}_${TAG_VERSION}_JS_wasm.zip"
           zip $archive_name openIM.wasm
           echo "Created archive: $archive_name"
-
-      - name: List generated files
-        run: |
-          cd wasm/cmd
-          archive_name="${PROJECT_NAME}_${TAG_VERSION}_JS_wasm.zip"
-          echo "Generated WASM files:"
-          ls -la openIM.wasm
-          ls -la $archive_name
-          echo "Archive contents:"
-          unzip -l $archive_name
 
       - name: Upload WASM files to Release
         uses: softprops/action-gh-release@v2
