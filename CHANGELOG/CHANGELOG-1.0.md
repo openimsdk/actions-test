@@ -1,3 +1,6 @@
+## [v1.0.000000.9-buil12](https://github.com/openimsdk/actions-test/releases/tag/v1.0.000000.9-buil12) 	(2025-07-04)
+
+
 ## [v1.0.0](https://github.com/openimsdk/actions-test/releases/tag/v1.0.0) 2024-10-23
 
 ### New Features
