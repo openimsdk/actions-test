@@ -14,6 +14,7 @@ jobs:
     env:
       TAG_VERSION: ${{ github.ref_name }}
       PROJECT_NAME: ${{ github.event.repository.name }}
+      NDK_VERSION: "20.1.5948944" # NDK r20b
     steps:
       - uses: actions/checkout@v4
 
@@ -31,19 +32,18 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install specific NDK version and setup environment
+      - name: Install NDK r20b
         run: |
-          echo "Installing NDK r20b..."
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;20.1.5948944"
+          echo "Installing NDK r20b (version $NDK_VERSION)..."
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;$NDK_VERSION"
 
-          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/20.1.5948944" >> $GITHUB_ENV
-          echo "NDK_ROOT=$ANDROID_HOME/ndk/20.1.5948944" >> $GITHUB_ENV
-          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/20.1.5948944" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> $GITHUB_ENV
+          echo "NDK_ROOT=$ANDROID_HOME/ndk/$NDK_VERSION" >> $GITHUB_ENV
 
           # 验证NDK安装
-          if [ -d "$ANDROID_HOME/ndk/20.1.5948944" ]; then
+          if [ -d "$ANDROID_HOME/ndk/$NDK_VERSION" ]; then
             echo "NDK r20b installed successfully"
-            ls -la $ANDROID_HOME/ndk/20.1.5948944
+            ls -la $ANDROID_HOME/ndk/$NDK_VERSION
           else
             echo "NDK installation failed"
             exit 1
@@ -53,20 +53,14 @@ jobs:
         run: |
           go install golang.org/x/mobile/cmd/gomobile@latest
           go install golang.org/x/mobile/cmd/gobind@latest
-
-          # 使用指定的NDK初始化
-          export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/20.1.5948944
-          gomobile init -ndk $ANDROID_HOME/ndk/20.1.5948944
+          gomobile init -ndk $ANDROID_HOME/ndk/$NDK_VERSION
 
       - name: Build Android AAR
         run: |
-          # 确保使用正确的NDK
-          export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/20.1.5948944
-          export NDK_ROOT=$ANDROID_HOME/ndk/20.1.5948944
+          export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION
+          export NDK_ROOT=$ANDROID_HOME/ndk/$NDK_VERSION
 
-          echo "Using NDK: $ANDROID_NDK_HOME"
-          echo "Available NDK versions:"
-          ls -la $ANDROID_HOME/ndk/
+          echo "Using NDK r20b: $ANDROID_NDK_HOME"
 
           gomobile bind -v -trimpath -ldflags="-s -w" \
             -o ./open_im_sdk.aar -target=android \
