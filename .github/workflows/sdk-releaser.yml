@@ -26,7 +26,7 @@ jobs:
           distribution: "temurin"
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v2
 
       - name: Install NDK
         run: |
@@ -113,21 +113,21 @@ jobs:
           mkdir -p openIM-wasm
           cp openIM.wasm openIM-wasm/
           cp "$(go env GOROOT)/misc/wasm/wasm_exec.js" openIM-wasm/
-          
+
           # 创建使用说明
           cat > openIM-wasm/README.md << EOF
           # OpenIM WASM
-          
+
           This package contains the OpenIM WASM binary and required JavaScript runtime.
-          
+
           ## Files
           - openIM.wasm: The WebAssembly binary
           - wasm_exec.js: Go WASM runtime (required)
-          
+
           ## Usage
           Include both files in your web application.
           EOF
-          
+
           # 创建压缩包
           zip -r openIM-wasm.zip openIM-wasm/
 
@@ -147,4 +147,3 @@ jobs:
           draft: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
