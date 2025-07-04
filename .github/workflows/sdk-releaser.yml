@@ -53,18 +53,16 @@ jobs:
         run: |
           go install golang.org/x/mobile/cmd/gomobile@latest
           go install golang.org/x/mobile/cmd/gobind@latest
-          gomobile init -ndk $ANDROID_HOME/ndk/$NDK_VERSION
+          # gomobile init
 
-      - name: Build Android AAR
+      - name: Build Android AAR using Makefile
         run: |
           export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION
           export NDK_ROOT=$ANDROID_HOME/ndk/$NDK_VERSION
 
           echo "Using NDK r20b: $ANDROID_NDK_HOME"
-
-          gomobile bind -v -trimpath -ldflags="-s -w" \
-            -o ./open_im_sdk.aar -target=android \
-            ./open_im_sdk/ ./open_im_sdk_callback/
+          echo "Building Android AAR using make android..."
+          make android
 
       - name: Create Android archive
         run: |
