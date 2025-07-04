@@ -101,14 +101,14 @@ jobs:
       - name: Build iOS xcframework
         run: |
           # gomobile bind -v -trimpath -ldflags="-s -w" \
-          #   -o ./OpenIMSDK.xcframework -target=ios \
+          #   -o ./build/OpenIMCore.xcframework -target=ios \
           #   ./open_im_sdk/ ./open_im_sdk_callback/
           make ios
 
       - name: Create iOS archive
         run: |
           archive_name="${PROJECT_NAME}_${TAG_VERSION}_iOS_xcframework.zip"
-          zip -r $archive_name OpenIMSDK.xcframework
+          zip -r $archive_name build/OpenIMCore.xcframework
           echo "Created archive: $archive_name"
 
       - name: Upload iOS xcframework to Release
