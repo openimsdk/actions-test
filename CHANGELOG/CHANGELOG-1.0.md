@@ -1,3 +1,7 @@
+## [v1.0.000000.9-buil5](https://github.com/openimsdk/actions-test/releases/tag/v1.0.000000.9-buil5) 	(2025-07-04)
+
+**Full Changelog**: [v1.0.000000.7-buil7...v1.0.000000.9-buil5](https://github.com/openimsdk/actions-test/compare/v1.0.000000.7-buil7...v1.0.000000.9-buil5)
+
 ## [v1.0.0](https://github.com/openimsdk/actions-test/releases/tag/v1.0.0) 2024-10-23
 
 ### New Features
