@@ -90,6 +90,9 @@ jobs:
 
   build-wasm:
     runs-on: ubuntu-latest
+    env:
+      TAG_VERSION: ${{ github.ref_name }}
+      PROJECT_NAME: ${{ github.event.repository.name }}
     steps:
       - uses: actions/checkout@v4
 
@@ -109,41 +112,25 @@ jobs:
       - name: Create WASM archive
         run: |
           cd wasm/cmd
-          # 创建包含wasm文件和运行时的压缩包
-          mkdir -p openIM-wasm
-          cp openIM.wasm openIM-wasm/
-          cp "$(go env GOROOT)/misc/wasm/wasm_exec.js" openIM-wasm/
-
-          # 创建使用说明
-          cat > openIM-wasm/README.md << EOF
-          # OpenIM WASM
-
-          This package contains the OpenIM WASM binary and required JavaScript runtime.
-
-          ## Files
-          - openIM.wasm: The WebAssembly binary
-          - wasm_exec.js: Go WASM runtime (required)
-
-          ## Usage
-          Include both files in your web application.
-          EOF
-
-          # 创建压缩包
-          zip -r openIM-wasm.zip openIM-wasm/
+          archive_name="${PROJECT_NAME}_${TAG_VERSION}_JS_wasm.zip"
+          zip $archive_name openIM.wasm
+          echo "Created archive: $archive_name"
 
       - name: List generated files
         run: |
+          cd wasm/cmd
+          archive_name="${PROJECT_NAME}_${TAG_VERSION}_JS_wasm.zip"
           echo "Generated WASM files:"
-          ls -la wasm/cmd/openIM.wasm
-          ls -la wasm/cmd/openIM-wasm.zip
+          ls -la openIM.wasm
+          ls -la $archive_name
           echo "Archive contents:"
-          unzip -l wasm/cmd/openIM-wasm.zip
+          unzip -l $archive_name
 
       - name: Upload WASM files to Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: wasm/cmd/openIM-wasm.zip
+          files: wasm/cmd/${{ env.PROJECT_NAME }}_${{ env.TAG_VERSION }}_JS_wasm.zip
           draft: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
