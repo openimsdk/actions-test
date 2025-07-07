@@ -76,7 +76,6 @@ jobs:
           echo "Created mock files in $archive_name"
           ls -la $archive_name
       # ============== 模拟构建步骤结束 ==============
-
       - name: List built files (Windows)
         if: runner.os == 'Windows'
         run: |
@@ -141,87 +140,146 @@ jobs:
           draft: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  combine-assets:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download release assets
+        run: |
+          tag_version="${{ github.ref_name }}"
+          repo="${{ github.repository }}"
+
+          release_info=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/$repo/releases/tags/$tag_version")
+
+          mkdir -p downloads
+
+          # 定义原始文件名到目标目录的映射
+          declare -A asset_mapping
+          asset_mapping["ubuntu-amd64-$tag_version-assets.zip"]="linux_x64"
+          asset_mapping["ubuntu-arm64-$tag_version-assets.zip"]="linux_arm64"
+          asset_mapping["macos-amd64-$tag_version-assets.zip"]="mac_x64"
+          asset_mapping["macos-arm64-$tag_version-assets.zip"]="mac_arm64"
+          asset_mapping["windows-amd64-$tag_version-assets.zip"]="win_x64"
+          asset_mapping["windows-386-$tag_version-assets.zip"]="win_ia32"
+
+          for asset in "${!asset_mapping[@]}"; do
+            echo "Attempting to download: $asset"
+            
+            download_url=$(echo "$release_info" | jq -r --arg name "$asset" \
+              '.assets[] | select(.name == $name) | .browser_download_url')
+            
+            if [ "$download_url" != "null" ] && [ -n "$download_url" ]; then
+              echo "Downloading $asset from $download_url"
+              curl -L -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                -o "downloads/$asset" "$download_url"
+              
+              if [ -f "downloads/$asset" ]; then
+                echo "Successfully downloaded: $asset ($(du -h "downloads/$asset" | cut -f1))"
+                # 保存映射关系供后续使用
+                echo "${asset}:${asset_mapping[$asset]}" >> downloads/mapping.txt
+              else
+                echo "Failed to download: $asset"
+              fi
+            else
+              echo "Asset not found in release: $asset"
+            fi
+          done
+
+          echo "Downloaded files:"
+          ls -la downloads/
+
+      - name: Create combined archive
+        run: |
+          tag_version="${{ github.ref_name }}"
+          combined_name="all-platforms-$tag_version-assets"
+
+          # 创建主目录和 assets 子目录
+          mkdir -p "$combined_name/assets"
+
+          # 读取映射关系并处理每个下载的文件
+          if [ -f "downloads/mapping.txt" ]; then
+            while IFS=':' read -r zip_file target_dir; do
+              if [ -f "downloads/$zip_file" ]; then
+                echo "Processing: $zip_file -> assets/$target_dir"
+                
+                # 创建目标目录
+                mkdir -p "$combined_name/assets/$target_dir"
+                
+                # 创建临时解压目录
+                temp_dir="temp_extract_$(basename "$zip_file" .zip)"
+                mkdir -p "$temp_dir"
+                
+                # 解压到临时目录
+                unzip -q "downloads/$zip_file" -d "$temp_dir"
+                
+                # 查找解压后的内容并移动到目标目录
+                # 先尝试找到解压后的第一层目录
+                extracted_content=$(find "$temp_dir" -mindepth 1 -maxdepth 1 -type d)
+                
+                if [ -n "$extracted_content" ] && [ $(echo "$extracted_content" | wc -l) -eq 1 ]; then
+                  # 如果只有一个目录，将其内容移动到目标目录
+                  echo "Moving contents from: $extracted_content"
+                  mv "$extracted_content"/* "$combined_name/assets/$target_dir/" 2>/dev/null || true
+                else
+                  # 如果有多个文件/目录或直接是文件，全部移动
+                  echo "Moving all extracted content"
+                  mv "$temp_dir"/* "$combined_name/assets/$target_dir/" 2>/dev/null || true
+                fi
+                
+                # 清理临时目录
+                rm -rf "$temp_dir"
+                
+                echo "Completed processing: $zip_file"
+              else
+                echo "File not found: downloads/$zip_file"
+              fi
+            done < downloads/mapping.txt
+          fi
+
+          echo "=== Combined archive structure ==="
+          echo "Directory tree:"
+          tree "$combined_name" 2>/dev/null || find "$combined_name" -type d | sed 's/[^/]*\//│   /g;s/│   \([^/]*\)$/├── \1/'
+
+          echo ""
+          echo "File count per platform:"
+          for platform_dir in "$combined_name/assets"/*/; do
+            if [ -d "$platform_dir" ]; then
+              file_count=$(find "$platform_dir" -type f | wc -l)
+              dir_name=$(basename "$platform_dir")
+              echo "  $dir_name: $file_count files"
+              
+              # 显示每个平台的前几个文件作为示例
+              echo "    Sample files:"
+              find "$platform_dir" -type f | head -3 | while read file; do
+                echo "      $(basename "$file")"
+              done
+            fi
+          done
+
+          # 创建最终的压缩包
+          zip -r "$combined_name.zip" "$combined_name/"
+
+          echo ""
+          echo "=== Created combined archive ==="
+          ls -la "$combined_name.zip"
+          echo "Archive size: $(du -h "$combined_name.zip" | cut -f1)"
+
+      - name: Upload combined assets to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: all-platforms-${{ github.ref_name }}-assets.zip
+          draft: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ############
 
-# name: Build assets in release
-
-# on:
-#   release:
-#     types: [created]
-
-# jobs:
-#   build:
-#     runs-on: ${{ matrix.os }}
-#     strategy:
-#       matrix:
-#         include:
-#           - os: ubuntu-latest
-#             arch: amd64
-#             build: buildLinux
-#           - os: ubuntu-latest
-#             arch: arm64
-#             build: buildLinux
-#           - os: macos-latest
-#             arch: amd64
-#             build: buildIOS
-#           - os: macos-latest
-#             arch: arm64
-#             build: buildIOS
-#           - os: windows-latest
-#             arch: amd64
-#             build: buildWindows
-#           - os: windows-latest
-#             arch: 386
-#             build: buildWindows
-
-#     steps:
-#       - name: Checkout code
-#         uses: actions/checkout@v4
-
-#       - name: Setup Go environment
-#         uses: actions/setup-go@v5
-#         with:
-#           go-version: "1.22"
-
-#       - name: Check Go version
-#         run: go version
-
-#       - name: Install ARM64 cross-compilation toolchain
-#         if: matrix.arch == 'arm64' && matrix.os == 'ubuntu-latest'
-#         run: |
-#           sudo apt-get update
-#           sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
-#           echo "CC=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
-#           echo "CXX=aarch64-linux-gnu-g++" >> $GITHUB_ENV
-
-#       - name: Install MinGW-w64 using Chocolatey
-#         if: runner.os == 'Windows' && matrix.arch == '386'
-#         run: |
-#           curl -L -o mingw32.7z https://sourceforge.net/projects/mingw-w64/files/Toolchains%20targetting%20Win32/Personal%20Builds/mingw-builds/8.1.0/threads-posix/dwarf/i686-8.1.0-release-posix-dwarf-rt_v6-rev0.7z/download
-#           7z x mingw32.7z -oC:/mingw32
-
-#       - name: Setup and build on Windows ${{ matrix.arch }}
-#         if: runner.os == 'Windows'
-#         run: |
-#           ./bootstrap_install_mage.bat
-#           $env:GOARCH="${{ matrix.arch }}"
-#           if ($env:GOARCH -eq "386") {
-#             $env:PATH = "C:/mingw32/bin;$env:PATH"
-#             gcc --version
-#             $env:CC="gcc -m32"
-#             $env:CXX="g++ -m32"
-#           }
-#           mage ${{ matrix.build }}
-
-#       - name: Setup and build on ${{ matrix.os }} ${{ matrix.arch }}
-#         if: runner.os != 'Windows'
-#         run: |
-#           sudo bash ./bootstrap_install_mage.sh
-#           export GOARCH=${{ matrix.arch }}
-#           sudo -E mage ${{ matrix.build }}
-
-#       - name: Upload Artifacts
-#         uses: actions/upload-artifact@v4
-#         with:
-#           name: ${{ matrix.os }}-${{ matrix.arch }}-assets
-#           path: shared/${{ (matrix.os == 'macos-latest' && 'ios' || (matrix.os == 'windows-latest' && 'windows' || 'linux')) }}/
+# //////////////////////
+# assets/
+# ├── linux_arm64
+# ├── linux_x64
+# ├── mac_arm64
+# ├── mac_x64
+# ├── win_ia32
+# └── win_x64
