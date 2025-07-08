@@ -1,172 +1,270 @@
-name: SDK Releaser
+name: Build assets in release
 
 on:
   release:
     types: [created]
-  # push:
-  #   tags:
-  #     - "v*"
-  workflow_dispatch:
-    inputs:
-      tag_name:
-        description: "Tag name for release (e.g., v3.8.4)"
-        required: true
-        type: string
 
 jobs:
-  build-android:
-    runs-on: ubuntu-latest
-    env:
-      TAG_VERSION: ${{ github.event.inputs.tag_name || github.ref_name }}
-      PROJECT_NAME: ${{ github.event.repository.name }}
-      NDK_VERSION: "20.1.5948944" # NDK r20b
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            arch: amd64
+            build: buildLinux
+            os_name: ubuntu
+          - os: ubuntu-latest
+            arch: arm64
+            build: buildLinux
+            os_name: ubuntu
+          - os: macos-latest
+            arch: amd64
+            build: buildIOS
+            os_name: macos
+          - os: macos-latest
+            arch: arm64
+            build: buildIOS
+            os_name: macos
+          - os: windows-latest
+            arch: amd64
+            build: buildWindows
+            os_name: windows
+          - os: windows-latest
+            arch: 386
+            build: buildWindows
+            os_name: windows
+
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.inputs.tag_name || github.ref }}
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.23"
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          java-version: "17"
-          distribution: "temurin"
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install NDK r20b
+      # ============== 模拟构建步骤 (用于测试) ==============
+      # 这部分只是为了模拟生成文件，实际使用时请替换为您的真实构建步骤
+      - name: Create mock build files for testing (Windows)
+        if: runner.os == 'Windows'
         run: |
-          echo "Installing NDK r20b (version $NDK_VERSION)..."
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;$NDK_VERSION"
+          $tag_version = "${{ github.ref_name }}"
+          $archive_name = "${{ matrix.os_name }}-${{ matrix.arch }}-$tag_version-assets"
+          New-Item -ItemType Directory -Path $archive_name -Force
 
-          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> $GITHUB_ENV
-          echo "NDK_ROOT=$ANDROID_HOME/ndk/$NDK_VERSION" >> $GITHUB_ENV
+          if ("${{ matrix.arch }}" -eq "amd64") {
+            "Mock Windows binary for ${{ matrix.arch }}" | Out-File -FilePath "$archive_name/libopenimsdk-${{ matrix.arch }}.dll"
+          } else {
+            "Mock Windows binary for ${{ matrix.arch }}" | Out-File -FilePath "$archive_name/libopenimsdk-${{ matrix.arch }}.dll"
+          }
+          "Mock Windows header" | Out-File -FilePath "$archive_name/libopenimsdk.h"
 
-          if [ -d "$ANDROID_HOME/ndk/$NDK_VERSION" ]; then
-            echo "NDK r20b installed successfully"
-            ls -la $ANDROID_HOME/ndk/$NDK_VERSION
+          Write-Host "Created mock files in $archive_name"
+          Get-ChildItem -Path $archive_name
+
+      - name: Create mock build files for testing (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          tag_version="${{ github.ref_name }}"
+          archive_name="${{ matrix.os_name }}-${{ matrix.arch }}-$tag_version-assets"
+          mkdir -p $archive_name
+
+          if [ "${{ matrix.os }}" = "macos-latest" ]; then
+            echo "Mock macOS binary for ${{ matrix.arch }}" > $archive_name/libopenimsdk-${{ matrix.arch }}.dylib
+            echo "Mock macOS header" > $archive_name/libopenimsdk.h
           else
-            echo "NDK installation failed"
+            echo "Mock Linux binary for ${{ matrix.arch }}" > $archive_name/libopenimsdk-${{ matrix.arch }}.so
+            echo "Mock Linux header" > $archive_name/libopenimsdk.h
+          fi
+
+          echo "Created mock files in $archive_name"
+          ls -la $archive_name
+      # ============== 模拟构建步骤结束 ==============
+      - name: List built files (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          $tag_version = "${{ github.ref_name }}"
+          $archive_name = "${{ matrix.os_name }}-${{ matrix.arch }}-$tag_version-assets"
+          Write-Host "Checking directory: $archive_name"
+          if (Test-Path $archive_name) {
+            Get-ChildItem -Path $archive_name -Recurse
+          } else {
+            Write-Host "Directory $archive_name not found"
+          }
+
+      - name: List built files (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          tag_version="${{ github.ref_name }}"
+          archive_name="${{ matrix.os_name }}-${{ matrix.arch }}-$tag_version-assets"
+          echo "Checking directory: $archive_name"
+          ls -la $archive_name || echo "Directory $archive_name not found"
+          find $archive_name -type f || echo "No files found in $archive_name"
+
+      - name: Create archive (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          $tag_version = "${{ github.ref_name }}"
+          $archive_name = "${{ matrix.os_name }}-${{ matrix.arch }}-$tag_version-assets"
+
+          if (Test-Path $archive_name) {
+            $fileCount = (Get-ChildItem -Path $archive_name -File -Recurse).Count
+            if ($fileCount -gt 0) {
+              Compress-Archive -Path "$archive_name/*" -DestinationPath "$archive_name.zip" -Force
+              Write-Host "Created archive: $archive_name.zip"
+              Get-Item "$archive_name.zip"
+            } else {
+              Write-Host "No files found in $archive_name"
+              exit 1
+            }
+          } else {
+            Write-Host "Directory $archive_name not found"
+            exit 1
+          }
+
+      - name: Create archive (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          tag_version="${{ github.ref_name }}"
+          archive_name="${{ matrix.os_name }}-${{ matrix.arch }}-$tag_version-assets"
+
+          if [ -d "$archive_name" ] && [ "$(find $archive_name -type f | wc -l)" -gt 0 ]; then
+            zip -r $archive_name.zip $archive_name/
+            echo "Created archive: $archive_name.zip"
+            ls -la $archive_name.zip
+          else
+            echo "No files found in $archive_name"
             exit 1
           fi
 
-      - name: Install gomobile
-        run: |
-          go install golang.org/x/mobile/cmd/gomobile@latest
-          go install golang.org/x/mobile/cmd/gobind@latest
-          # gomobile init
-
-      - name: Build Android AAR using Makefile
-        run: |
-          export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION
-          export NDK_ROOT=$ANDROID_HOME/ndk/$NDK_VERSION
-
-          echo "Using NDK r20b: $ANDROID_NDK_HOME"
-          echo "Building Android AAR using make android..."
-          make android
-
-      - name: Create Android archive
-        run: |
-          archive_name="${PROJECT_NAME}_${TAG_VERSION}_Android_aar.zip"
-          zip $archive_name open_im_sdk.aar
-          echo "Created archive: $archive_name"
-
-      - name: Upload Android AAR to Release
+      - name: Upload to release
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.tag_name
         with:
-          tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
-          files: ${{ env.PROJECT_NAME }}_${{ env.TAG_VERSION }}_Android_aar.zip
+          files: ${{ matrix.os_name }}-${{ matrix.arch }}-${{ github.ref_name }}-assets.zip
           draft: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  build-ios:
-    runs-on: macos-latest
-    env:
-      TAG_VERSION: ${{ github.event.inputs.tag_name || github.ref_name }}
-      PROJECT_NAME: ${{ github.event.repository.name }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.inputs.tag_name || github.ref }}
-
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: "1.23"
-
-      - name: Install gomobile
-        run: |
-          go install golang.org/x/mobile/cmd/gomobile@latest
-          go install golang.org/x/mobile/cmd/gobind@latest
-          gomobile init
-
-      - name: Build iOS xcframework
-        run: |
-          # gomobile bind -v -trimpath -ldflags="-s -w" \
-          #   -o ./build/OpenIMCore.xcframework -target=ios \
-          #   ./open_im_sdk/ ./open_im_sdk_callback/
-          make ios
-
-      - name: Create iOS archive
-        run: |
-          cd build
-          archive_name="${PROJECT_NAME}_${TAG_VERSION}_iOS_xcframework.zip"
-          zip -r ../$archive_name OpenIMCore.xcframework
-          echo "Created archive: $archive_name"
-
-      - name: Upload iOS xcframework to Release
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.tag_name
-        with:
-          tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
-          files: ${{ env.PROJECT_NAME }}_${{ env.TAG_VERSION }}_iOS_xcframework.zip
-          draft: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build-wasm:
+  combine-assets:
     runs-on: ubuntu-latest
-    env:
-      TAG_VERSION: ${{ github.event.inputs.tag_name || github.ref_name }}
-      PROJECT_NAME: ${{ github.event.repository.name }}
+    needs: build
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.inputs.tag_name || github.ref }}
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.23"
-
-      - name: Install make and zip
-        run: sudo apt-get update && sudo apt-get install -y make zip
-
-      - name: Build WASM
+      - name: Download release assets
         run: |
-          cd wasm/cmd
-          make wasm
+          tag_version="${{ github.ref_name }}"
+          repo="${{ github.repository }}"
 
-      - name: Create WASM archive
+          release_info=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/$repo/releases/tags/$tag_version")
+
+          mkdir -p downloads
+
+          declare -A asset_mapping
+          asset_mapping["ubuntu-amd64-$tag_version-assets.zip"]="linux_x64"
+          asset_mapping["ubuntu-arm64-$tag_version-assets.zip"]="linux_arm64"
+          asset_mapping["macos-amd64-$tag_version-assets.zip"]="mac_x64"
+          asset_mapping["macos-arm64-$tag_version-assets.zip"]="mac_arm64"
+          asset_mapping["windows-amd64-$tag_version-assets.zip"]="win_x64"
+          asset_mapping["windows-386-$tag_version-assets.zip"]="win_ia32"
+
+          for asset in "${!asset_mapping[@]}"; do
+            echo "Attempting to download: $asset"
+            
+            download_url=$(echo "$release_info" | jq -r --arg name "$asset" \
+              '.assets[] | select(.name == $name) | .browser_download_url')
+            
+            if [ "$download_url" != "null" ] && [ -n "$download_url" ]; then
+              echo "Downloading $asset from $download_url"
+              curl -L -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                -o "downloads/$asset" "$download_url"
+              
+              if [ -f "downloads/$asset" ]; then
+                echo "Successfully downloaded: $asset ($(du -h "downloads/$asset" | cut -f1))"
+                echo "${asset}:${asset_mapping[$asset]}" >> downloads/mapping.txt
+              else
+                echo "Failed to download: $asset"
+              fi
+            else
+              echo "Asset not found in release: $asset"
+            fi
+          done
+
+          echo "Downloaded files:"
+          ls -la downloads/
+
+      - name: Create combined archive
         run: |
-          cd wasm/cmd
-          archive_name="${PROJECT_NAME}_${TAG_VERSION}_JS_wasm.zip"
-          zip $archive_name openIM.wasm
-          echo "Created archive: $archive_name"
+          tag_version="${{ github.ref_name }}"
+          combined_name="all-platforms-$tag_version-assets"
 
-      - name: Upload WASM files to Release
+          mkdir -p "$combined_name/assets"
+
+          if [ -f "downloads/mapping.txt" ]; then
+            while IFS=':' read -r zip_file target_dir; do
+              if [ -f "downloads/$zip_file" ]; then
+                echo "Processing: $zip_file -> assets/$target_dir"
+                
+                mkdir -p "$combined_name/assets/$target_dir"
+                
+                temp_dir="temp_extract_$(basename "$zip_file" .zip)"
+                mkdir -p "$temp_dir"
+                
+                unzip -q "downloads/$zip_file" -d "$temp_dir"
+                
+                extracted_content=$(find "$temp_dir" -mindepth 1 -maxdepth 1 -type d)
+                
+                if [ -n "$extracted_content" ] && [ $(echo "$extracted_content" | wc -l) -eq 1 ]; then
+                  echo "Moving contents from: $extracted_content"
+                  mv "$extracted_content"/* "$combined_name/assets/$target_dir/" 2>/dev/null || true
+                else
+                  echo "Moving all extracted content"
+                  mv "$temp_dir"/* "$combined_name/assets/$target_dir/" 2>/dev/null || true
+                fi
+                
+                rm -rf "$temp_dir"
+                
+                echo "Completed processing: $zip_file"
+              else
+                echo "File not found: downloads/$zip_file"
+              fi
+            done < downloads/mapping.txt
+          fi
+
+          echo "=== Combined archive structure ==="
+          echo "Directory tree:"
+          tree "$combined_name" 2>/dev/null || find "$combined_name" -type d | sed 's/[^/]*\//│   /g;s/│   \([^/]*\)$/├── \1/'
+
+          echo ""
+          echo "File count per platform:"
+          for platform_dir in "$combined_name/assets"/*/; do
+            if [ -d "$platform_dir" ]; then
+              file_count=$(find "$platform_dir" -type f | wc -l)
+              dir_name=$(basename "$platform_dir")
+              echo "  $dir_name: $file_count files"
+              
+              echo "    Sample files:"
+              find "$platform_dir" -type f | head -3 | while read file; do
+                echo "      $(basename "$file")"
+              done
+            fi
+          done
+
+          zip -r "$combined_name.zip" "$combined_name/"
+
+          echo ""
+          echo "=== Created combined archive ==="
+          ls -la "$combined_name.zip"
+          echo "Archive size: $(du -h "$combined_name.zip" | cut -f1)"
+
+      - name: Upload combined assets to release
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.tag_name
         with:
-          tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
-          files: wasm/cmd/${{ env.PROJECT_NAME }}_${{ env.TAG_VERSION }}_JS_wasm.zip
+          files: all-platforms-${{ github.ref_name }}-assets.zip
           draft: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+############
+
+# assets/
+# ├── linux_arm64
+# ├── linux_x64
+# ├── mac_arm64
+# ├── mac_x64
+# ├── win_ia32
+# └── win_x64
