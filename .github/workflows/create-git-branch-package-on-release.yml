@@ -57,7 +57,7 @@ jobs:
 
           # create version file
           mkdir -p version
-          echo "${{ env.TAG_VERSION }}" > version/version
+          echo -n "${{ env.TAG_VERSION }}" > version/version
 
           echo "Version file content after update:"
           cat version/version

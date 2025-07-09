@@ -98,7 +98,6 @@ jobs:
               core.warning(`Could not find or update release for tag ${tagName}: ${error.message}`);
             }
 
-
       # # Step 8: Create custom source code packages
       # - name: Create custom source code packages
       #   run: |
@@ -159,7 +158,7 @@ jobs:
 
       #     mkdir -p version
 
-      #     echo "${{ env.TAG_VERSION }}" > version/version
+      #     echo -n "${{ env.TAG_VERSION }}" > version/version
 
       #     echo "Version file content after update:"
       #     cat version/version

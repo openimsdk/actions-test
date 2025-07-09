@@ -21,7 +21,7 @@ jobs:
       # Step 2: Update version file
       - name: Update version file
         run: |
-          echo "${{ env.TAG_VERSION }}" > version/version  # 将 tag 写入 version 文件
+          echo -n "${{ env.TAG_VERSION }}" > version/version  # 将 tag 写入 version 文件
 
       # Step 3: Archive the code
       - name: Create source archive
