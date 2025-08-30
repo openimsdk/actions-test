@@ -39,8 +39,8 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
           # 关键修复：将git@github.com格式的URL转换为https格式并使用令牌
-          git config --global url."https://x-access-token:${{ secrets.BOT_TOKEN }}@github.com/".insteadOf "git@github.com:"
-          # git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "git@github.com:"
+          # git config --global url."https://x-access-token:${{ secrets.BOT_TOKEN }}@github.com/".insteadOf "git@github.com:"
+          git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "git@github.com:"
 
           # 修改.gitmodules文件以使用HTTPS URL
           if [ -f .gitmodules ]; then
@@ -75,9 +75,6 @@ jobs:
           fi
 
       - name: Create custom source code packages
-        # env:
-        #   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        #   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           PROJECT_NAME="${{ github.event.repository.name }}"
           echo "Project name: $PROJECT_NAME"
@@ -99,14 +96,18 @@ jobs:
 
           mkdir -p temp-package
 
-          echo "Cloning single branch with full history..."
-          # REPO_URL="https://github.com/${{ github.repository }}.git"
-          REPO_URL="https://${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
-
-          # git clone --single-branch --branch "$CURRENT_BRANCH" "$REPO_URL" temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
-          gh repo clone ${{ github.repository }} temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }} -- --single-branch --branch "$CURRENT_BRANCH"
+          # 不使用 gh repo clone，而是直接复制已经克隆好的仓库（包括子模块）
+          echo "复制已克隆的仓库（包含子模块）..."
+          cp -r $(pwd) temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
 
           cd temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
+
+          # 检查子模块目录内容
+          echo "检查子模块目录内容:"
+          find . -type d -name "protocol-enterprise" -exec ls -la {} \; || echo "找不到子模块目录"
+
+          # # 移除 .git 目录但保留 .git 文件（这样可以保留 Git 仓库状态而不包含完整历史）
+          # find . -name ".git" -type d | grep -v "^./.git$" | xargs rm -rf
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -131,22 +132,21 @@ jobs:
           git log --oneline -5 2>/dev/null || echo "No git history found"
           git remote -v 2>/dev/null || echo "No remotes found"
 
+          # 显示子模块内容以确认存在
+          echo "子模块目录内容:"
+          find . -type d -name "protocol-enterprise" -exec ls -la {} \; || echo "找不到子模块目录"
+
           cd ..
 
           zip -r ../$PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.zip $PROJECT_NAME-${{ env.TAG_VERSION }}/
           tar -czf ../$PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.tar.gz $PROJECT_NAME-${{ env.TAG_VERSION }}/
 
-          # cd ..
+          cd ..
+          echo "创建的文件大小:"
+          du -h $PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.*
 
-          # echo "Created files:"
-          # ls -la $PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.*
-          # echo "File sizes:"
-          # du -h $PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.*
-
-          # echo "ZIP contents (first 20 lines):"
-          # unzip -l $PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.zip | head -20
-          # echo "TAR.GZ contents (first 20 lines):"
-          # tar -tzf $PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.tar.gz | head -20
+          echo "打包文件内容概览:"
+          unzip -l $PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.zip | grep protocol-enterprise | head -10
 
       - name: Upload custom source packages to existing release
         uses: softprops/action-gh-release@v2
