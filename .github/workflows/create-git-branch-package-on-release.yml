@@ -19,15 +19,16 @@ jobs:
   create-package:
     runs-on: ubuntu-latest
     env:
-      TAG_VERSION: ${{ github.event.release.tag_name }}
+      TAG_VERSION: ${{ github.event.release.tag_name || github.event.inputs.tag_version }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.BOT_TOKEN }} # 使用BOT_TOKEN作为GH_TOKEN
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           # submodules: "recursive"
+          token: ${{ secrets.BOT_TOKEN }} # 使用BOT_TOKEN进行checkout
 
       - name: Safe submodule initialization
         env:
@@ -38,21 +39,27 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-          # 配置Git使用token进行身份验证
-          # git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
-          git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "git@github.com:"
+          # 使用gh命令行工具设置git认证
+          echo "${{ secrets.BOT_TOKEN }}" | gh auth login --with-token
+          gh auth setup-git
 
           echo "Checking for submodules..."
           if [ -f .gitmodules ]; then
             if [ -s .gitmodules ]; then
               echo "Initializing submodules..."
-              if git submodule sync --recursive 2>/dev/null; then
-                git submodule update --init --force --recursive || {
-                  echo "Warning: Some submodules failed to initialize, continuing anyway..."
-                }
-              else
-                echo "Warning: Submodule sync failed, continuing without submodules..."
-              fi
+              # 显示子模块配置信息进行调试
+              echo "Submodule configuration:"
+              cat .gitmodules
+              
+              # 尝试使用gh命令克隆子模块
+              echo "Cloning submodules with gh CLI..."
+              git submodule foreach --recursive 'GH_TOKEN=${{ secrets.BOT_TOKEN }} gh repo clone $(git config --get remote.origin.url) .'
+              
+              # 如果上述方法失败，回退到传统方法
+              git submodule sync --recursive
+              git -c "credential.helper=!f() { echo username=x-access-token; echo password=${{ secrets.BOT_TOKEN }}; }; f" submodule update --init --force --recursive || {
+                echo "Warning: Some submodules failed to initialize, continuing anyway..."
+              }
             else
               echo ".gitmodules exists but is empty, skipping submodule initialization"
             fi
