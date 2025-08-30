@@ -94,11 +94,13 @@ jobs:
 
           echo "Final branch to use: $CURRENT_BRANCH"
 
-          mkdir -p temp-package
+          mkdir -p temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
 
-          # 不使用 gh repo clone，而是直接复制已经克隆好的仓库（包括子模块）
+          # 修复: 复制所有文件和目录，排除temp-package
           echo "复制已克隆的仓库（包含子模块）..."
-          cp -r $(pwd) temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
+          for item in $(ls -A | grep -v "temp-package"); do
+            cp -r "$item" temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}/
+          done
 
           cd temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
 
