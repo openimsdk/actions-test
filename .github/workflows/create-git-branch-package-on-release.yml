@@ -21,7 +21,7 @@ jobs:
     env:
       TAG_VERSION: ${{ github.event.release.tag_name || github.event.inputs.tag_version }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GH_TOKEN: ${{ secrets.BOT_TOKEN }} # 使用BOT_TOKEN作为GH_TOKEN
+      GH_TOKEN: ${{ secrets.BOT_TOKEN }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -33,15 +33,26 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # 设置GitHub Actions Bot身份
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-          # 使用git凭据帮助器而不是gh auth
-          git config --global credential.helper store
-          echo "https://x-access-token:${{ secrets.BOT_TOKEN }}@github.com" > ~/.git-credentials
+          # 关键修复：将git@github.com格式的URL转换为https格式并使用令牌
+          git config --global url."https://x-access-token:${{ secrets.BOT_TOKEN }}@github.com/".insteadOf "git@github.com:"
+          # git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "git@github.com:"
+
+          # 修改.gitmodules文件以使用HTTPS URL
+          if [ -f .gitmodules ]; then
+            echo "Converting SSH URLs to HTTPS in .gitmodules"
+            sed -i 's|git@github.com:|https://github.com/|g' .gitmodules
+            git config --file=.gitmodules --get-regexp url | while read key url; do
+              # 为每个子模块URL添加认证信息
+              new_url=$(echo "$url" | sed "s|https://github.com/|https://x-access-token:${{ secrets.BOT_TOKEN }}@github.com/|g")
+              git config --file=.gitmodules "${key}" "${new_url}"
+            done
+            cat .gitmodules
+          fi
 
           echo "Checking for submodules..."
           if [ -f .gitmodules ]; then

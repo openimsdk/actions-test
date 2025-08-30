@@ -67,13 +67,15 @@ jobs:
           push: false
           tags: ${{ env.IMAGE_LOCAL_CACHE }}:latest
           labels: ${{ steps.meta.outputs.labels }}
-          outputs: type=docker,dest=/tmp/openim-server.tar
+          outputs: type=oci,dest=/tmp/openim-server.tar
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Load image for local testing
         run: |
-          docker load < /tmp/openim-server.tar
+          # 使用skopeo工具将OCI格式转换为Docker可用格式
+          sudo apt-get update && sudo apt-get install -y skopeo
+          skopeo copy oci-archive:/tmp/openim-server.tar docker-daemon:${{ env.IMAGE_LOCAL_CACHE }}:latest
           docker tag ${{ env.IMAGE_LOCAL_CACHE }}:latest openim/openim-server:local
 
       - name: Checkout compose repository
