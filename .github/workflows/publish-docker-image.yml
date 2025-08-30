@@ -17,6 +17,9 @@ on:
 
 env:
   GO_VERSION: "1.21"
+  IMAGE_LOCAL_CACHE: "openim-server-cache"
+  # IMAGE_NAME: "openim-server"
+  IMAGE_NAME: ${{ github.event.repository.name }}
 
 jobs:
   publish-docker-images:
@@ -33,12 +36,45 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5.5.1
+        with:
+          images: |
+            ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}
+            ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+            registry.cn-hangzhou.aliyuncs.com/openimsdk/${{ env.IMAGE_NAME }}
+
+          # tag_args+=(--tag "${{ secrets.DOCKER_USERNAME }}/$IMAGE_NAME:$tag")
+          # tag_args+=(--tag "ghcr.io/${{ github.repository_owner }}/$IMAGE_NAME:$tag")
+          # tag_args+=(--tag "registry.cn-hangzhou.aliyuncs.com/openimsdk/$IMAGE_NAME:$tag")
+          tags: |
+            type=ref,event=tag
+            type=schedule
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern=v{{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha
+
+      - name: Build multi-platform Docker image with cache
+        uses: docker/build-push-action@v6.18.0
         with:
           context: ./main-repo
-          load: true
-          tags: "openim/openim-server:local"
+          platforms: linux/amd64,linux/arm64
+          push: false
+          tags: ${{ env.IMAGE_LOCAL_CACHE }}:latest
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=docker,dest=/tmp/openim-server.tar
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Load image for local testing
+        run: |
+          docker load < /tmp/openim-server.tar
+          docker tag ${{ env.IMAGE_LOCAL_CACHE }}:latest openim/openim-server:local
 
       - name: Checkout compose repository
         uses: actions/checkout@v4
@@ -51,7 +87,7 @@ jobs:
         run: |
           IP=$(hostname -I | awk '{print $1}')
           echo "The IP Address is: $IP"
-          echo "::set-output name=ip::$IP"
+          echo "ip=$IP" >> $GITHUB_OUTPUT
 
       - name: Update .env to use the local image
         run: |
@@ -93,29 +129,6 @@ jobs:
               exit 0
             fi
 
-
-      - name: Extract metadata for Docker #  (tags, labels) 
-        if: success()
-        id: meta
-        uses: docker/metadata-action@v5.5.1
-        with:
-          images: |
-            openim/openim-server
-            ghcr.io/openimsdk/openim-server
-            registry.cn-hangzhou.aliyuncs.com/openimsdk/openim-server
-
-          # generate Docker tags based on the following events/attributes
-          tags: |
-            type=ref,event=tag
-            type=schedule
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern=v{{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=sha
-
       - name: Log in to Docker Hub
         uses: docker/login-action@v2
         with:
@@ -136,11 +149,38 @@ jobs:
           username: ${{ secrets.ALIREGISTRY_USERNAME }}
           password: ${{ secrets.ALIREGISTRY_TOKEN }}
 
-      - name: Build and push Docker images
-        uses: docker/build-push-action@v5
-        with:
-          context: ./main-repo
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+      # 直接推送已经构建的镜像
+      - name: Push pre-built images to registries
+        if: success()
+        run: |
+          # 重新加载之前保存的镜像
+          docker load < /tmp/openim-server.tar
+
+          # 获取并显示基础镜像
+          echo "已加载的基础镜像："
+          docker images ${{ env.IMAGE_LOCAL_CACHE }}:latest
+
+          # 为每个目标标签创建新标签并推送
+          echo "开始为多个仓库创建标签并推送..."
+          IFS=',' read -ra TAGS <<< "${{ steps.meta.outputs.tags }}"
+          for tag in "${TAGS[@]}"; do
+            echo "创建并推送标签: $tag"
+            docker tag ${{ env.IMAGE_LOCAL_CACHE }}:latest $tag
+            docker push $tag
+          done
+
+      # # Push the previously built images
+      # - name: Push pre-built images to registries
+      #   if: success()
+      #   uses: docker/build-push-action@v6.18.0
+      #   with:
+      #     context: ./main-repo
+      #     push: true
+      #     platforms: linux/amd64,linux/arm64
+      #     tags: ${{ steps.meta.outputs.tags }}
+      #     labels:
+      #       ${{ steps.meta.outputs.labels }}
+      #       # Use the previously built image as the cache source
+      #     cache-from: |
+      #       type=gha
+      #       type=registry,ref=${{ env.IMAGE_LOCAL_CACHE }}:latest

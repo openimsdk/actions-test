@@ -3,6 +3,17 @@ name: Create Git Branch Package on Release
 on:
   release:
     types: [created]
+  workflow_dispatch:
+    inputs:
+      tag_version:
+        description: "要打包的标签版本 (例如 v1.0.0)"
+        required: true
+        type: string
+      target_branch:
+        description: "目标分支 (默认: main)"
+        required: false
+        default: "fix/private-submodule"
+        type: string
 
 jobs:
   create-package:
@@ -19,7 +30,18 @@ jobs:
           # submodules: "recursive"
 
       - name: Safe submodule initialization
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         run: |
+          # 设置GitHub Actions Bot身份
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          # 配置Git使用token进行身份验证
+          # git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
+          git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "git@github.com:"
+
           echo "Checking for submodules..."
           if [ -f .gitmodules ]; then
             if [ -s .gitmodules ]; then

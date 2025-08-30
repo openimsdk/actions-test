@@ -1,0 +1,3 @@
+[submodule "protocol-enterprise"]
+	path = protocol-enterprise
+	url = git@github.com:openimsdk/protocol-enterprise.git
