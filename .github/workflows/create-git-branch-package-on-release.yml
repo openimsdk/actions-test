@@ -3,17 +3,6 @@ name: Create Git Branch Package on Release
 on:
   release:
     types: [created]
-  workflow_dispatch:
-    inputs:
-      tag_version:
-        description: "要打包的标签版本 (例如 v1.0.0)"
-        required: true
-        type: string
-      target_branch:
-        description: "目标分支 (默认: main)"
-        required: false
-        default: "fix/private-submodule"
-        type: string
 
 jobs:
   create-package:
@@ -32,23 +21,18 @@ jobs:
       - name: Safe submodule initialization
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         run: |
-          # 设置GitHub Actions Bot身份
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-          # 关键修复：将git@github.com格式的URL转换为https格式并使用令牌
-          # git config --global url."https://x-access-token:${{ secrets.BOT_TOKEN }}@github.com/".insteadOf "git@github.com:"
           git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "git@github.com:"
+          git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
 
-          # 修改.gitmodules文件以使用HTTPS URL
           if [ -f .gitmodules ]; then
             echo "Converting SSH URLs to HTTPS in .gitmodules"
             sed -i 's|git@github.com:|https://github.com/|g' .gitmodules
             git config --file=.gitmodules --get-regexp url | while read key url; do
-              # 为每个子模块URL添加认证信息
-              new_url=$(echo "$url" | sed "s|https://github.com/|https://x-access-token:${{ secrets.BOT_TOKEN }}@github.com/|g")
+              new_url=$(echo "$url" | sed "s|https://github.com/|https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/|g")
               git config --file=.gitmodules "${key}" "${new_url}"
             done
             cat .gitmodules
@@ -58,11 +42,9 @@ jobs:
           if [ -f .gitmodules ]; then
             if [ -s .gitmodules ]; then
               echo "Initializing submodules..."
-              # 显示子模块配置信息进行调试
               echo "Submodule configuration:"
               cat .gitmodules
               
-              # 使用配置的凭据克隆子模块
               git submodule sync --recursive
               git submodule update --init --force --recursive || {
                 echo "Warning: Some submodules failed to initialize, continuing anyway..."
@@ -96,20 +78,13 @@ jobs:
 
           mkdir -p temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
 
-          # 修复: 复制所有文件和目录，排除temp-package
-          echo "复制已克隆的仓库（包含子模块）..."
           for item in $(ls -A | grep -v "temp-package"); do
             cp -r "$item" temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}/
           done
 
           cd temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
 
-          # 检查子模块目录内容
-          echo "检查子模块目录内容:"
           find . -type d -name "protocol-enterprise" -exec ls -la {} \; || echo "找不到子模块目录"
-
-          # # 移除 .git 目录但保留 .git 文件（这样可以保留 Git 仓库状态而不包含完整历史）
-          # find . -name ".git" -type d | grep -v "^./.git$" | xargs rm -rf
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -134,9 +109,6 @@ jobs:
           git log --oneline -5 2>/dev/null || echo "No git history found"
           git remote -v 2>/dev/null || echo "No remotes found"
 
-          # 显示子模块内容以确认存在
-          echo "子模块目录内容:"
-          find . -type d -name "protocol-enterprise" -exec ls -la {} \; || echo "找不到子模块目录"
 
           cd ..
 
@@ -144,10 +116,10 @@ jobs:
           tar -czf ../$PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.tar.gz $PROJECT_NAME-${{ env.TAG_VERSION }}/
 
           cd ..
-          echo "创建的文件大小:"
+          echo "Create file Size:"
           du -h $PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.*
 
-          echo "打包文件内容概览:"
+            echo "Package contents overview:"
           unzip -l $PROJECT_NAME-${{ env.TAG_VERSION }}-with-git.zip | grep protocol-enterprise | head -10
 
       - name: Upload custom source packages to existing release
