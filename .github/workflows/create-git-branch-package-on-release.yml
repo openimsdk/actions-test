@@ -82,13 +82,6 @@ jobs:
             cp -r "$item" temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}/
           done
 
-          cd temp-package/$PROJECT_NAME-${{ env.TAG_VERSION }}
-
-          find . -type d -name "protocol-enterprise" -exec ls -la {} \; || echo "找不到子模块目录"
-
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
           # create version file
           mkdir -p version
           echo -n "${{ env.TAG_VERSION }}" > version/version
