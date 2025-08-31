@@ -11,11 +11,10 @@ on:
       tag:
         description: "Tag version to be used for Docker image"
         required: true
-        default: "v3.8.0"
+        default: "v3.8.3"
 
 env:
-  GO_VERSION: "1.21"
-  IMAGE_LOCAL_CACHE: "openim-server-cache"
+  GO_VERSION: "1.22"
   # IMAGE_NAME: "openim-server"
   IMAGE_NAME: ${{ github.event.repository.name }}
   DOCKER_BUILDKIT: 1
@@ -47,10 +46,6 @@ jobs:
             ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}
             ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
             registry.cn-hangzhou.aliyuncs.com/openimsdk/${{ env.IMAGE_NAME }}
-
-          # tag_args+=(--tag "${{ secrets.DOCKER_USERNAME }}/$IMAGE_NAME:$tag")
-          # tag_args+=(--tag "ghcr.io/${{ github.repository_owner }}/$IMAGE_NAME:$tag")
-          # tag_args+=(--tag "registry.cn-hangzhou.aliyuncs.com/openimsdk/$IMAGE_NAME:$tag")
           tags: |
             type=ref,event=tag
             type=schedule
@@ -62,18 +57,15 @@ jobs:
             type=semver,pattern={{major}}
             type=sha
 
-      # 安装skopeo工具用于处理OCI格式镜像
       - name: Install skopeo
         run: |
           sudo apt-get update && sudo apt-get install -y skopeo
 
-      # 构建多架构镜像并导出为OCI格式
       - name: Build multi-arch images as OCI
         run: |
-          # 创建目录
           mkdir -p /tmp/oci-image /tmp/docker-cache
 
-          # 构建多架构镜像并保存为OCI格式
+          # Build multi-architecture image and save in OCI format        
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
             --output type=oci,dest=/tmp/oci-image/multi-arch.tar \
@@ -81,13 +73,12 @@ jobs:
             --cache-from type=gha \
             ./main-repo
 
-          # 使用skopeo将OCI格式的amd64镜像转换为Docker格式并加载
-          skopeo copy --override-arch amd64 oci-archive:/tmp/oci-image/multi-arch.tar docker-daemon:openim/openim-server:local
+            # Use skopeo to convert the amd64 image from OCI format to Docker format and load it
+          skopeo copy --override-arch amd64 oci-archive:/tmp/oci-image/multi-arch.tar docker-daemon:${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:local
 
-          # 验证镜像
+          # check image
           docker image ls | grep openim
 
-      # 测试步骤（保持不变）
       - name: Checkout compose repository
         uses: actions/checkout@v4
         with:
@@ -103,7 +94,7 @@ jobs:
 
       - name: Update .env to use the local image
         run: |
-          sed -i 's|OPENIM_SERVER_IMAGE=.*|OPENIM_SERVER_IMAGE=openim/openim-server:local|' ${{ github.workspace }}/compose-repo/.env
+          sed -i 's|OPENIM_SERVER_IMAGE=.*|OPENIM_SERVER_IMAGE=${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:local|' ${{ github.workspace }}/compose-repo/.env
           sed -i 's|MINIO_EXTERNAL_ADDRESS=.*|MINIO_EXTERNAL_ADDRESS=http://${{ steps.get-ip.outputs.ip }}:10005|' ${{ github.workspace }}/compose-repo/.env
 
       - name: Start services using Docker Compose
@@ -161,11 +152,9 @@ jobs:
           username: ${{ secrets.ALIREGISTRY_USERNAME }}
           password: ${{ secrets.ALIREGISTRY_TOKEN }}
 
-      # 测试通过后，从缓存推送多架构镜像
       - name: Push multi-architecture images
         if: success()
         run: |
-          # 从缓存推送多架构镜像
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
             $(echo "${{ steps.meta.outputs.tags }}" | sed 's/,/ --tag /g' | sed 's/^/--tag /') \
