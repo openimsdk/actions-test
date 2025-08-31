@@ -20,19 +20,19 @@ jobs:
 
       - name: Safe submodule initialization
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.BOT_TOKEN }}
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-          git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "git@github.com:"
-          git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          git config --global url."https://x-access-token:${{ secrets.BOT_TOKEN }}@github.com/".insteadOf "git@github.com:"
+          git config --global url."https://x-access-token:${{ secrets.BOT_TOKEN }}@github.com/".insteadOf "https://github.com/"
 
           if [ -f .gitmodules ]; then
             echo "Converting SSH URLs to HTTPS in .gitmodules"
             sed -i 's|git@github.com:|https://github.com/|g' .gitmodules
             git config --file=.gitmodules --get-regexp url | while read key url; do
-              new_url=$(echo "$url" | sed "s|https://github.com/|https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/|g")
+              new_url=$(echo "$url" | sed "s|https://github.com/|https://x-access-token:${{ secrets.BOT_TOKEN }}@github.com/|g")
               git config --file=.gitmodules "${key}" "${new_url}"
             done
             cat .gitmodules
