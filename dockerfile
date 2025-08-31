@@ -27,7 +27,7 @@ RUN apt-get update && \
 RUN go mod download
 
 # 添加一个故意延时的操作，确保构建不会太快
-RUN sleep 15
+RUN sleep 5
 
 # 第二阶段：代码编译
 FROM deps AS builder
@@ -54,8 +54,6 @@ RUN go build -ldflags="-s -w" -o bin/server ./cmd/server/
 RUN echo 'package main\n\nimport "testing"\n\nfunc TestMain(t *testing.T) {\n  // Just a placeholder test\n}' > cmd/server/main_test.go && \
     cd cmd/server && go test -v
 
-# 故意添加延时以模拟长时间构建
-RUN sleep 20
 
 # 第三阶段：最终镜像
 FROM alpine:latest
@@ -83,8 +81,6 @@ RUN echo '#!/bin/sh\necho "Health check passed!"\nexit 0' > /usr/local/bin/mage 
 RUN mkdir -p /app/static && \
     echo '<html><body><h1>OpenIM Server</h1></body></html>' > /app/static/index.html
 
-# 再次故意延时
-RUN sleep 10
 
 # 设置环境变量
 ENV APP_ENV=production \
