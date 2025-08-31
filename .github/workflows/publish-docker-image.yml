@@ -32,7 +32,7 @@ jobs:
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
-        
+
       - name: Set up Docker Buildx
         id: buildx
         uses: docker/setup-buildx-action@v3
@@ -62,22 +62,29 @@ jobs:
             type=semver,pattern={{major}}
             type=sha
 
-      # 构建多架构镜像并使amd64版本可用于测试
-      - name: Build multi-arch images
+      # 安装skopeo工具用于处理OCI格式镜像
+      - name: Install skopeo
         run: |
-          # 创建缓存目录
-          mkdir -p /tmp/docker-cache
-          
-          # 构建多架构镜像并缓存
+          sudo apt-get update && sudo apt-get install -y skopeo
+
+      # 构建多架构镜像并导出为OCI格式
+      - name: Build multi-arch images as OCI
+        run: |
+          # 创建目录
+          mkdir -p /tmp/oci-image /tmp/docker-cache
+
+          # 构建多架构镜像并保存为OCI格式
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
-            --tag openim/openim-server:local \
+            --output type=oci,dest=/tmp/oci-image/multi-arch.tar \
             --cache-to type=local,dest=/tmp/docker-cache \
             --cache-from type=gha \
-            --load \
             ./main-repo
-          
-          # 验证镜像是否成功构建
+
+          # 使用skopeo将OCI格式的amd64镜像转换为Docker格式并加载
+          skopeo copy --override-arch amd64 oci-archive:/tmp/oci-image/multi-arch.tar docker-daemon:openim/openim-server:local
+
+          # 验证镜像
           docker image ls | grep openim
 
       # 测试步骤（保持不变）
@@ -154,11 +161,11 @@ jobs:
           username: ${{ secrets.ALIREGISTRY_USERNAME }}
           password: ${{ secrets.ALIREGISTRY_TOKEN }}
 
-      # 测试通过后，直接从缓存推送多架构镜像
+      # 测试通过后，从缓存推送多架构镜像
       - name: Push multi-architecture images
         if: success()
         run: |
-          # 利用缓存直接构建并推送多架构镜像
+          # 从缓存推送多架构镜像
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
             $(echo "${{ steps.meta.outputs.tags }}" | sed 's/,/ --tag /g' | sed 's/^/--tag /') \
