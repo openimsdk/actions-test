@@ -59,24 +59,30 @@ jobs:
             type=semver,pattern={{major}}
             type=sha
 
+      # 启动本地Docker Registry
+      - name: Start local Docker registry
+        run: |
+          docker run -d -p 5000:5000 --restart=always --name local-registry registry:2
+          echo "启动本地Docker Registry成功"
+
+      # 构建并推送到本地Registry
       - name: Build multi-platform Docker image with cache
         uses: docker/build-push-action@v6.18.0
         with:
           context: ./main-repo
           platforms: linux/amd64,linux/arm64
-          push: false
-          tags: ${{ env.IMAGE_LOCAL_CACHE }}:latest
+          push: true
+          tags: localhost:5000/${{ env.IMAGE_LOCAL_CACHE }}:latest
           labels: ${{ steps.meta.outputs.labels }}
-          outputs: type=oci,dest=/tmp/openim-server.tar
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Load image for local testing
+      # 从本地Registry拉取amd64架构的镜像用于测试
+      - name: Pull image from local registry for testing
         run: |
-          # 使用skopeo工具将OCI格式转换为Docker可用格式
-          sudo apt-get update && sudo apt-get install -y skopeo
-          skopeo copy oci-archive:/tmp/openim-server.tar docker-daemon:${{ env.IMAGE_LOCAL_CACHE }}:latest
-          docker tag ${{ env.IMAGE_LOCAL_CACHE }}:latest openim/openim-server:local
+          docker pull localhost:5000/${{ env.IMAGE_LOCAL_CACHE }}:latest --platform linux/amd64
+          docker tag localhost:5000/${{ env.IMAGE_LOCAL_CACHE }}:latest openim/openim-server:local
+          echo "已从本地Registry拉取镜像并标记为测试版本"
 
       - name: Checkout compose repository
         uses: actions/checkout@v4
@@ -151,23 +157,17 @@ jobs:
           username: ${{ secrets.ALIREGISTRY_USERNAME }}
           password: ${{ secrets.ALIREGISTRY_TOKEN }}
 
-      # 直接推送已经构建的镜像
-      - name: Push pre-built images to registries
+      # 从本地Registry拉取并推送到远程仓库
+      - name: Tag and push images to registries
         if: success()
         run: |
-          # 重新加载之前保存的镜像
-          docker load < /tmp/openim-server.tar
-
-          # 获取并显示基础镜像
-          echo "已加载的基础镜像："
-          docker images ${{ env.IMAGE_LOCAL_CACHE }}:latest
-
-          # 为每个目标标签创建新标签并推送
+          # 为每个目标标签从本地Registry拉取、重新标记并推送
           echo "开始为多个仓库创建标签并推送..."
           IFS=',' read -ra TAGS <<< "${{ steps.meta.outputs.tags }}"
           for tag in "${TAGS[@]}"; do
             echo "创建并推送标签: $tag"
-            docker tag ${{ env.IMAGE_LOCAL_CACHE }}:latest $tag
+            # 通过Docker Registry API方式处理多架构镜像
+            docker buildx imagetools create --tag $tag localhost:5000/${{ env.IMAGE_LOCAL_CACHE }}:latest
             docker push $tag
           done
 
