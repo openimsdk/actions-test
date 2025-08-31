@@ -4,10 +4,8 @@ on:
   push:
     branches:
       - release-*
-
   release:
     types: [published]
-
   workflow_dispatch:
     inputs:
       tag:
@@ -20,6 +18,7 @@ env:
   IMAGE_LOCAL_CACHE: "openim-server-cache"
   # IMAGE_NAME: "openim-server"
   IMAGE_NAME: ${{ github.event.repository.name }}
+  DOCKER_BUILDKIT: 1
 
 jobs:
   publish-docker-images:
@@ -33,8 +32,12 @@ jobs:
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
+        
       - name: Set up Docker Buildx
+        id: buildx
         uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: network=host
 
       - name: Extract metadata for Docker
         id: meta
@@ -59,31 +62,25 @@ jobs:
             type=semver,pattern={{major}}
             type=sha
 
-      # 启动本地Docker Registry
-      - name: Start local Docker registry
+      # 构建多架构镜像并使amd64版本可用于测试
+      - name: Build multi-arch images
         run: |
-          docker run -d -p 5000:5000 --restart=always --name local-registry registry:2
-          echo "启动本地Docker Registry成功"
+          # 创建缓存目录
+          mkdir -p /tmp/docker-cache
+          
+          # 构建多架构镜像并缓存
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --tag openim/openim-server:local \
+            --cache-to type=local,dest=/tmp/docker-cache \
+            --cache-from type=gha \
+            --load \
+            ./main-repo
+          
+          # 验证镜像是否成功构建
+          docker image ls | grep openim
 
-      # 构建并推送到本地Registry
-      - name: Build multi-platform Docker image with cache
-        uses: docker/build-push-action@v6.18.0
-        with:
-          context: ./main-repo
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: localhost:5000/${{ env.IMAGE_LOCAL_CACHE }}:latest
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      # 从本地Registry拉取amd64架构的镜像用于测试
-      - name: Pull image from local registry for testing
-        run: |
-          docker pull localhost:5000/${{ env.IMAGE_LOCAL_CACHE }}:latest --platform linux/amd64
-          docker tag localhost:5000/${{ env.IMAGE_LOCAL_CACHE }}:latest openim/openim-server:local
-          echo "已从本地Registry拉取镜像并标记为测试版本"
-
+      # 测试步骤（保持不变）
       - name: Checkout compose repository
         uses: actions/checkout@v4
         with:
@@ -157,32 +154,14 @@ jobs:
           username: ${{ secrets.ALIREGISTRY_USERNAME }}
           password: ${{ secrets.ALIREGISTRY_TOKEN }}
 
-      # 从本地Registry拉取并推送到远程仓库
-      - name: Tag and push images to registries
+      # 测试通过后，直接从缓存推送多架构镜像
+      - name: Push multi-architecture images
         if: success()
         run: |
-          # 为每个目标标签从本地Registry拉取、重新标记并推送
-          echo "开始为多个仓库创建标签并推送..."
-          IFS=',' read -ra TAGS <<< "${{ steps.meta.outputs.tags }}"
-          for tag in "${TAGS[@]}"; do
-            echo "创建并推送标签: $tag"
-            # 通过Docker Registry API方式处理多架构镜像
-            docker buildx imagetools create --tag $tag localhost:5000/${{ env.IMAGE_LOCAL_CACHE }}:latest
-            docker push $tag
-          done
-
-      # # Push the previously built images
-      # - name: Push pre-built images to registries
-      #   if: success()
-      #   uses: docker/build-push-action@v6.18.0
-      #   with:
-      #     context: ./main-repo
-      #     push: true
-      #     platforms: linux/amd64,linux/arm64
-      #     tags: ${{ steps.meta.outputs.tags }}
-      #     labels:
-      #       ${{ steps.meta.outputs.labels }}
-      #       # Use the previously built image as the cache source
-      #     cache-from: |
-      #       type=gha
-      #       type=registry,ref=${{ env.IMAGE_LOCAL_CACHE }}:latest
+          # 利用缓存直接构建并推送多架构镜像
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            $(echo "${{ steps.meta.outputs.tags }}" | sed 's/,/ --tag /g' | sed 's/^/--tag /') \
+            --cache-from type=local,src=/tmp/docker-cache \
+            --push \
+            ./main-repo
