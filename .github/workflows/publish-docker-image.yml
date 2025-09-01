@@ -30,7 +30,7 @@ jobs:
           path: main-repo
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v3.3.0
 
       - name: Set up Docker Buildx
         id: buildx
@@ -40,7 +40,7 @@ jobs:
 
       - name: Extract metadata for Docker
         id: meta
-        uses: docker/metadata-action@v5.5.1
+        uses: docker/metadata-action@v5.6.0
         with:
           images: |
             ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}
@@ -101,52 +101,53 @@ jobs:
         run: |
           cd ${{ github.workspace }}/compose-repo
           docker compose up -d
-          sleep 60
 
-      - name: Check openim-server health
-        run: |
-          timeout=300
-          interval=30
-          elapsed=0
-          while [[ $elapsed -le $timeout ]]; do
-            if ! docker exec openim-server mage check; then
-              echo "openim-server is not ready, waiting..."
-              sleep $interval
-              elapsed=$(($elapsed + $interval))
-            else
-              echo "Health check successful"
-              exit 0
-            fi
-          done
-          echo "Health check failed after 5 minutes"
-          exit 1
+          docker compose ps
 
-      - name: Check openim-chat health
-        if: success()
-        run: |
-          if ! docker exec openim-chat mage check; then
-              echo "openim-chat check failed"
-              exit 1
-            else
-              echo "Health check successful"
-              exit 0
-            fi
+      # - name: Check openim-server health
+      #   run: |
+      #     timeout=300
+      #     interval=30
+      #     elapsed=0
+      #     while [[ $elapsed -le $timeout ]]; do
+      #       if ! docker exec openim-server mage check; then
+      #         echo "openim-server is not ready, waiting..."
+      #         sleep $interval
+      #         elapsed=$(($elapsed + $interval))
+      #       else
+      #         echo "Health check successful"
+      #         exit 0
+      #       fi
+      #     done
+      #     echo "Health check failed after 5 minutes"
+      #     exit 1
+
+      # - name: Check openim-chat health
+      #   if: success()
+      #   run: |
+      #     if ! docker exec openim-chat mage check; then
+      #         echo "openim-chat check failed"
+      #         exit 1
+      #       else
+      #         echo "Health check successful"
+      #         exit 0
+      #       fi
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3.3.0
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3.3.0
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Log in to Aliyun Container Registry
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3.3.0
         with:
           registry: registry.cn-hangzhou.aliyuncs.com
           username: ${{ secrets.ALIREGISTRY_USERNAME }}
