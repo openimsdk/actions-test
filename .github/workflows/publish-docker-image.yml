@@ -161,3 +161,33 @@ jobs:
             --cache-from type=local,src=/tmp/docker-cache \
             --push \
             ./main-repo
+
+      - name: Verify multi-platform support
+        run: |
+          images=(
+            "${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}"
+            "ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}"
+            "registry.cn-hangzhou.aliyuncs.com/openimsdk/${{ env.IMAGE_NAME }}"
+          )
+
+          for image in "${images[@]}"; do
+              for tag in $(echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n' | cut -d':' -f2); do
+                  echo "Verifying multi-arch support for $image:$tag"
+                  manifest=$(docker manifest inspect "$image:$tag" || echo "error")
+                  if [[ "$manifest" == "error" ]]; then
+                      echo "Manifest not found for $image:$tag"
+                      exit 1
+                  fi
+                  amd64_found=$(echo "$manifest" | jq '.manifests[] | select(.platform.architecture == "amd64")')
+                  arm64_found=$(echo "$manifest" | jq '.manifests[] | select(.platform.architecture == "arm64")')
+                  if [[ -z "$amd64_found" ]]; then
+                      echo "Multi-platform support check failed for $image:$tag - missing amd64"
+                      exit 1
+                  fi
+                  if [[ -z "$arm64_found" ]]; then
+                      echo "Multi-platform support check failed for $image:$tag - missing arm64"
+                      exit 1
+                  fi
+                  echo "✅ $image:$tag supports both amd64 and arm64 architectures"
+              done
+          done
