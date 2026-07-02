@@ -1,0 +1,45 @@
+name: Check-Coverage
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - "**/*.yaml"
+      - "CONTRIBUTORS"
+      - "CHANGELOG/**"
+  pull_request:
+    branches: [ "*" ]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - "**/*.yaml"
+      - "CONTRIBUTORS"
+      - "CHANGELOG/**"
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Golang with cache
+        uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          cache: true
+
+      - name: Install Dependencies
+        run: sudo apt update && sudo apt install -y libgpgme-dev libbtrfs-dev libdevmapper-dev
+
+      - name: Run Cover
+        run: go test ./... -coverprofile=coverage.txt -covermode=atomic
+        continue-on-error: true
+
+      - name: Upload Coverage to Codecov
+        uses: codecov/codecov-action@v7
+        with:
+          files: coverage.txt

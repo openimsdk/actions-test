@@ -1,0 +1,10 @@
+openim-sigs/openim-docker:
+  - source: ./config
+    dest: ./openim-chat/release/config
+    replace: true
+  - source: ./docs
+    dest: ./openim-chat/release/docs
+    replace: true
+  - source: ./scripts
+    dest: ./openim-chat/release/scripts
+    replace: true
