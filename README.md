@@ -1,34 +1,142 @@
-# actions-test
+<p align="center">
+    <a href="https://openim.io">
+        <img src="./assets/logo-gif/openim-logo.gif" width="60%" height="30%"/>
+    </a>
+</p>
 
-## 《劝学》
-君子曰：学不可以已。
+<div align="center">
 
-　　青，取之于蓝，而青于蓝；冰，水为之，而寒于水。木直中绳，輮以为轮，其曲中规。虽有槁暴，不复挺者，輮使之然也。故木受绳则直，金就砺则利，君子博学而日参省乎己，则知明而行无过矣。
+[![Stars](https://img.shields.io/github/stars/openimsdk/open-im-server?style=for-the-badge&logo=github&colorB=ff69b4)](https://github.com/openimsdk/open-im-server/stargazers)
+[![Forks](https://img.shields.io/github/forks/openimsdk/open-im-server?style=for-the-badge&logo=github&colorB=blue)](https://github.com/openimsdk/open-im-server/network/members)
+[![Codecov](https://img.shields.io/codecov/c/github/openimsdk/open-im-server?style=for-the-badge&logo=codecov&colorB=orange)](https://app.codecov.io/gh/openimsdk/open-im-server)
+[![Go Report Card](https://goreportcard.com/badge/github.com/openimsdk/open-im-server?style=for-the-badge)](https://goreportcard.com/report/github.com/openimsdk/open-im-server)
+[![Go Reference](https://img.shields.io/badge/Go%20Reference-blue.svg?style=for-the-badge&logo=go&logoColor=white)](https://pkg.go.dev/github.com/openimsdk/open-im-server/v3)
+[![License](https://img.shields.io/badge/license-Apache--2.0-green?style=for-the-badge)](https://github.com/openimsdk/open-im-server/blob/main/LICENSE)
+[![Slack](https://img.shields.io/badge/Slack-500%2B-blueviolet?style=for-the-badge&logo=slack&logoColor=white)](https://join.slack.com/t/openimsdk/shared_invite/zt-22720d66b-o_FvKxMTGXtcnnnHiMqe9Q)
+[![Best Practices](https://img.shields.io/badge/Best%20Practices-purple?style=for-the-badge)](https://www.bestpractices.dev/projects/8045)
+[![Good First Issues](https://img.shields.io/github/issues/openimsdk/open-im-server/good%20first%20issue?style=for-the-badge&logo=github)](https://github.com/openimsdk/open-im-server/issues?q=is%3Aissue+is%3Aopen+sort%3Aupdated-desc+label%3A%22good+first+issue%22)
+[![Language](https://img.shields.io/badge/Language-Go-blue.svg?style=for-the-badge&logo=go&logoColor=white)](https://golang.org/)
 
-　　故不登高山，不知天之高也；不临深溪，不知地之厚也；不闻先王之遗言，不知学问之大也。干、越、夷、貉之子，生而同声，长而异俗，教使之然也。诗曰：“嗟尔君子，无恒安息。靖共尔位，好是正直。神之听之，介尔景福。”神莫大于化道，福莫长于无祸。
+     
+<p align="center">
+  <a href="./README.md">English</a> · 
+  <a href="./README_zh_CN.md">中文</a> · 
+  <a href="./docs/readme/README_uk.md">Українська</a> · 
+  <a href="./docs/readme/README_cs.md">Česky</a> · 
+  <a href="./docs/readme/README_hu.md">Magyar</a> · 
+  <a href="./docs/readme/README_es.md">Español</a> · 
+  <a href="./docs/readme/README_fa.md">فارسی</a> · 
+  <a href="./docs/readme/README_fr.md">Français</a> · 
+  <a href="./docs/readme/README_de.md">Deutsch</a> · 
+  <a href="./docs/readme/README_pl.md">Polski</a> · 
+  <a href="./docs/readme/README_id.md">Indonesian</a> · 
+  <a href="./docs/readme/README_fi.md">Suomi</a> · 
+  <a href="./docs/readme/README_ml.md">മലയാളം</a> · 
+  <a href="./docs/readme/README_ja.md">日本語</a> · 
+  <a href="./docs/readme/README_nl.md">Nederlands</a> · 
+  <a href="./docs/readme/README_it.md">Italiano</a> · 
+  <a href="./docs/readme/README_ru.md">Русский</a> · 
+  <a href="./docs/readme/README_pt_BR.md">Português (Brasil)</a> · 
+  <a href="./docs/readme/README_eo.md">Esperanto</a> · 
+  <a href="./docs/readme/README_ko.md">한국어</a> · 
+  <a href="./docs/readme/README_ar.md">العربي</a> · 
+  <a href="./docs/readme/README_vi.md">Tiếng Việt</a> · 
+  <a href="./docs/readme/README_da.md">Dansk</a> · 
+  <a href="./docs/readme/README_el.md">Ελληνικά</a> · 
+  <a href="./docs/readme/README_tr.md">Türkçe</a>
+</p>
 
-　　吾尝终日而思矣，不如须臾之所学也；吾尝跂而望矣，不如登高之博见也。登高而招，臂非加长也，而见者远；顺风而呼，声非加疾也，而闻者彰。假舆马者，非利足也，而致千里；假舟楫者，非能水也，而绝江河。君子生非异也，善假于物也。(君子生 通：性)
 
-　　南方有鸟焉，名曰蒙鸠，以羽为巢，而编之以发，系之苇苕，风至苕折，卵破子死。巢非不完也，所系者然也。西方有木焉，名曰射干，茎长四寸，生于高山之上，而临百仞之渊，木茎非能长也，所立者然也。蓬生麻中，不扶而直；白沙在涅，与之俱黑。兰槐之根是为芷，其渐之滫，君子不近，庶人不服。其质非不美也，所渐者然也。故君子居必择乡，游必就士，所以防邪辟而近中正也。
+</div>
 
-　　物类之起，必有所始。荣辱之来，必象其德。肉腐出虫，鱼枯生蠹。怠慢忘身，祸灾乃作。强自取柱，柔自取束。邪秽在身，怨之所构。施薪若一，火就燥也，平地若一，水就湿也。草木畴生，禽兽群焉，物各从其类也。是故质的张，而弓矢至焉；林木茂，而斧斤至焉；树成荫，而众鸟息焉。醯酸，而蜹聚焉。故言有招祸也，行有招辱也，君子慎其所立乎！
+</p>
 
-　　积土成山，风雨兴焉；积水成渊，蛟龙生焉；积善成德，而神明自得，圣心备焉。故不积跬步，无以至千里；不积小流，无以成江海。骐骥一跃，不能十步；驽马十驾，功在不舍。锲而舍之，朽木不折；锲而不舍，金石可镂。蚓无爪牙之利，筋骨之强，上食埃土，下饮黄泉，用心一也。蟹六跪而二螯，非蛇鳝之穴无可寄托者，用心躁也。(江海 一作：江河)
+## :busts_in_silhouette: Join Our Community
 
-　　是故无冥冥之志者，无昭昭之明；无惛惛之事者，无赫赫之功。行衢道者不至，事两君者不容。目不能两视而明，耳不能两听而聪。螣蛇无足而飞，鼫鼠五技而穷。《诗》曰：“尸鸠在桑，其子七兮。淑人君子，其仪一兮。其仪一兮，心如结兮！”故君子结于一也。
++ 💬 [Follow us on Twitter](https://twitter.com/founder_im63606)
++ 🚀 [Join our Slack](https://join.slack.com/t/openimsdk/shared_invite/zt-2ijy1ys1f-O0aEDCr7ExRZ7mwsHAVg9A)
++ :eyes: [Join our WeChat Group](https://openim-1253691595.cos.ap-nanjing.myqcloud.com/WechatIMG20.jpeg)
 
-　　昔者瓠巴鼓瑟，而流鱼出听；伯牙鼓琴，而六马仰秣。故声无小而不闻，行无隐而不形 。玉在山而草木润，渊生珠而崖不枯。为善不积邪？安有不闻者乎？
+## Ⓜ️ About OpenIM
 
-　　学恶乎始？恶乎终？曰：其数则始乎诵经，终乎读礼；其义则始乎为士，终乎为圣人， 真积力久则入，学至乎没而后止也。故学数有终，若其义则不可须臾舍也。为之，人也；舍 之，禽兽也。故书者，政事之纪也；诗者，中声之所止也；礼者，法之大分，类之纲纪也。 故学至乎礼而止矣。夫是之谓道德之极。礼之敬文也，乐之中和也，诗书之博也，春秋之微 也，在天地之间者毕矣。
+Unlike standalone chat applications such as Telegram, Signal, and Rocket.Chat, OpenIM offers an open-source instant messaging solution designed specifically for developers rather than as a directly installable standalone chat app. Comprising OpenIM SDK and OpenIM Server, it provides developers with a complete set of tools and services to integrate instant messaging functions into their applications, including message sending and receiving, user management, and group management. Overall, OpenIM aims to provide developers with the necessary tools and framework to implement efficient instant messaging solutions in their applications.
 
-　　君子之学也，入乎耳，箸乎心，布乎四体，形乎动静。端而言，蝡而动，一可以为法则。小人之学也，入乎耳，出乎口；口耳之间，则四寸耳，曷足以美七尺之躯哉！古之学者为己，今之学者为人。君子之学也，以美其身；小人之学也，以为禽犊。故不问而告谓之傲，问一而告二谓之囋。傲、非也，囋、非也；君子如向矣。
+![App-OpenIM Relationship](./docs/images/oepnim-design.png)
 
-　　学莫便乎近其人。礼乐法而不说，诗书故而不切，春秋约而不速。方其人之习君子之说，则尊以遍矣，周于世矣。故曰：学莫便乎近其人。
+## 🚀 Introduction to OpenIMSDK
 
-　　学之经莫速乎好其人，隆礼次之。上不能好其人，下不能隆礼，安特将学杂识志，顺诗书而已耳。则末世穷年，不免为陋儒而已。将原先王，本仁义，则礼正其经纬蹊径也。若挈裘领，诎五指而顿之，顺者不可胜数也。不道礼宪，以诗书为之，譬之犹以指测河也，以戈舂黍也，以锥餐壶也，不可以得之矣。故隆礼，虽未明，法士也；不隆礼，虽察辩，散儒也。
+**OpenIMSDK**, designed for **OpenIMServer**, is an IM SDK created specifically for integration into client applications. It supports various functionalities and modules:
 
-　　问楛者，勿告也；告楛者，勿问也；说楛者，勿听也。有争气者，勿与辩也。故必由其道至，然后接之；非其道则避之。故礼恭，而后可与言道之方；辞顺，而后可与言道之理；色从而后可与言道之致。故未可与言而言，谓之傲；可与言而不言，谓之隐；不观气色而言，谓瞽。故君子不傲、不隐、不瞽，谨顺其身。诗曰：“匪交匪舒，天子所予。”此之谓也。
++ 🌟 Main Features:
+  - 📦 Local Storage
+  - 🔔 Listener Callbacks
+  - 🛡️ API Wrapping
+  - 🌐 Connection Management
 
-　　百发失一，不足谓善射；千里蹞步不至，不足谓善御；伦类不通，仁义不一，不足谓善学。学也者，固学一之也。一出焉，一入焉，涂巷之人也；其善者少，不善者多，桀纣盗跖也；全之尽之，然后学者也。
++ 📚 Main Modules:
+  1. 🚀 Initialization and Login
+  2. 👤 User Management
+  3. 👫 Friends Management
+  4. 🤖 Group Functions
+  5. 💬 Session Handling
 
-　　君子知夫不全不粹之不足以为美也，故诵数以贯之，思索以通之，为其人以处之，除其害者以持养之。使目非是无欲见也，使耳非是无欲闻也，使口非是无欲言也，使心非是无欲虑也。及至其致好之也，目好之五色，耳好之五声，口好之五味，心利之有天下。是故权利不能倾也，群众不能移也，天下不能荡也。生乎由是，死乎由是，夫是之谓德操。德操然后能定，能定然后能应。能定能应，夫是之谓成人。天见其明，地见其光，君子贵其全也。
+Built with Golang and supports cross-platform deployment to ensure a consistent integration experience across all platforms.
+
+👉 **[Explore the GO SDK](https://github.com/openimsdk/openim-sdk-core)**
+
+## 🌐 Introduction to OpenIMServer 
+
++ **OpenIMServer** features include:
+  - 🌐 Microservices Architecture: Supports cluster mode, including a gateway and multiple rpc services.
+  - 🚀 Diverse Deployment Options: Supports source code, Kubernetes, or Docker deployment.
+  - Massive User Support: Supports large-scale groups with hundreds of thousands, millions of users, and billions of messages.
+
+### Enhanced Business Functions:
+
++ **REST API**: Provides a REST API for business systems to enhance functionality, such as group creation and message pushing through backend interfaces.
+
++ **Webhooks**: Expands business forms through callbacks, sending requests to business servers before or after certain events.
+
+  ![Overall Architecture](./docs/images/architecture-layers.png)
+
+## :rocket: Quick Start
+
+Experience online for iOS/Android/H5/PC/Web:
+
+👉 **[OpenIM Online Demo](https://www.openim.io/en/commercial)**
+
+To facilitate user experience, we offer various deployment solutions. You can choose your preferred deployment method from the list below:
+
++ **[Source Code Deployment Guide](https://docs.openim.io/guides/gettingStarted/imSourceCodeDeployment)**
++ **[Docker Deployment Guide](https://docs.openim.io/guides/gettingStarted/dockerCompose)**
+
+## System Support
+
+Supports Linux, Windows, Mac systems, and ARM and AMD CPU architectures.
+
+## :link: Links
+
+  + **[Developer Manual](https://docs.openim.io/)**
+  + **[Changelog](https://github.com/openimsdk/open-im-server/blob/main/CHANGELOG.md)**
+
+## :writing_hand: How to Contribute
+
+We welcome contributions of any kind! Please make sure to read our [Contributor Documentation](https://github.com/openimsdk/open-im-server/blob/main/CONTRIBUTING.md) before submitting a Pull Request.
+
+  + **[Report a Bug](https://github.com/openimsdk/open-im-server/issues/new?assignees=&labels=bug&template=bug_report.md&title=)**
+  + **[Suggest a Feature](https://github.com/openimsdk/open-im-server/issues/new?assignees=&labels=enhancement&template=feature_request.md&title=)**
+  + **[Submit a Pull Request](https://github.com/openimsdk/open-im-server/pulls)**
+
+Thank you for contributing to building a powerful instant messaging solution!
+
+## :closed_book: License
+
+OpenIMSDK is available under the Apache License 2.0. See the [LICENSE file](https://github.com/openimsdk/open-im-server/blob/main/LICENSE) for more information. 
+
+
+
+## 🔮 Thanks to our contributors!
+
+<a href="https://github.com/openimsdk/open-im-server/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=openimsdk/open-im-server" />
+</a>

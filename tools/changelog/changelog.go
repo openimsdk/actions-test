@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -17,7 +18,7 @@ import (
 // Setting repo owner and repo name by generate changelog
 const (
 	repoOwner = "openimsdk"
-	repoName  = "actions-test"
+	repoName  = "open-im-server"
 )
 
 // GitHubRepo struct represents the repo details.
@@ -35,6 +36,10 @@ type ReleaseData struct {
 	Published string `json:"published_at"`
 }
 
+type GitHubError struct {
+	Message string `json:"message"`
+}
+
 // Method to classify and format release notes.
 func (g *GitHubRepo) classifyReleaseNotes(body string) map[string][]string {
 	result := map[string][]string{
@@ -49,10 +54,12 @@ func (g *GitHubRepo) classifyReleaseNotes(body string) map[string][]string {
 	// Regular expression to extract PR number and URL (case insensitive)
 	rePR := regexp.MustCompile(`(?i)in (https://github\.com/[^\s]+/pull/(\d+))`)
 
-	// Split the body into individual lines.
-	lines := strings.Split(body, "\n")
+	for line := range strings.SplitSeq(body, "\n") {
+		// Skip lines that contain "deps: Merge"
+		if strings.Contains(strings.ToLower(line), "deps: merge #") {
+			continue
+		}
 
-	for _, line := range lines {
 		// Use a regular expression to extract Full Changelog link and its title (case insensitive).
 		if strings.Contains(strings.ToLower(line), "**full changelog**") {
 			matches := regexp.MustCompile(`(?i)\*\*full changelog\*\*: (https://github\.com/[^\s]+/compare/([^\s]+))`).FindStringSubmatch(line)
@@ -103,7 +110,17 @@ func (g *GitHubRepo) classifyReleaseNotes(body string) map[string][]string {
 }
 
 // Method to generate the final changelog.
-func (g *GitHubRepo) generateChangelog(tag, date, htmlURL, body string) string {
+func (g *GitHubRepo) generateChangelog(tag, date, htmlURL, body string) (string, error) {
+	if tag == "" {
+		return "", errors.New("release tag is empty")
+	}
+	if len(date) < 10 {
+		return "", fmt.Errorf("release published_at is invalid: %q", date)
+	}
+	if htmlURL == "" {
+		return "", errors.New("release html_url is empty")
+	}
+
 	sections := g.classifyReleaseNotes(body)
 
 	// Convert ISO 8601 date to simpler format (YYYY-MM-DD)
@@ -135,7 +152,7 @@ func (g *GitHubRepo) generateChangelog(tag, date, htmlURL, body string) string {
 		changelog += fmt.Sprintf("**Full Changelog**: %s\n", g.FullChangelog)
 	}
 
-	return changelog
+	return changelog, nil
 }
 
 // Method to fetch release data from GitHub API.
@@ -160,6 +177,13 @@ func (g *GitHubRepo) fetchReleaseData(version string) (*ReleaseData, error) {
 	if err != nil {
 		return nil, err
 	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		var githubError GitHubError
+		if err := json.Unmarshal(body, &githubError); err == nil && githubError.Message != "" {
+			return nil, fmt.Errorf("github api returned %s: %s", resp.Status, githubError.Message)
+		}
+		return nil, fmt.Errorf("github api returned %s", resp.Status)
+	}
 
 	var releaseData ReleaseData
 	err = json.Unmarshal(body, &releaseData)
@@ -183,11 +207,15 @@ func main() {
 	// Fetch release data (either for latest or specific version)
 	releaseData, err := repo.fetchReleaseData(version)
 	if err != nil {
-		fmt.Println("Error fetching release data:", err)
-		return
+		fmt.Fprintln(os.Stderr, "Error fetching release data:", err)
+		os.Exit(1)
 	}
 
 	// Generate and print the formatted changelog
-	changelog := repo.generateChangelog(releaseData.TagName, releaseData.Published, releaseData.HtmlUrl, releaseData.Body)
+	changelog, err := repo.generateChangelog(releaseData.TagName, releaseData.Published, releaseData.HtmlUrl, releaseData.Body)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Error generating changelog:", err)
+		os.Exit(1)
+	}
 	fmt.Println(changelog)
 }
