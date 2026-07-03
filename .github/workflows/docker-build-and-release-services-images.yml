@@ -82,6 +82,6 @@ jobs:
           IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
           IMAGE_REGISTRIES: |
             ${{ secrets.DOCKER_USERNAME }}
-            ghcr.io/${{ github.repository_owner }}
+            ghcr.io/${{ github.repository_owner }}/actions-test
             registry.cn-hangzhou.aliyuncs.com/openimsdk
         run: build/build.sh

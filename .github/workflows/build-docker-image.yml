@@ -69,7 +69,7 @@ jobs:
         with:
           images: |
             openim/openim-chat
-            ghcr.io/openimsdk/openim-chat
+            ghcr.io/${{ github.repository_owner }}/actions-test-openim-chat
             registry.cn-hangzhou.aliyuncs.com/openimsdk/openim-chat
           tags: |
             type=ref,event=tag
@@ -94,7 +94,7 @@ jobs:
 
       - name: Verify multi-platform support
         run: |
-          images=("openim/openim-chat" "ghcr.io/openimsdk/openim-chat" "registry.cn-hangzhou.aliyuncs.com/openimsdk/openim-chat")
+          images=("openim/openim-chat" "ghcr.io/${{ github.repository_owner }}/actions-test-openim-chat" "registry.cn-hangzhou.aliyuncs.com/openimsdk/openim-chat")
           for image in "${images[@]}"; do
               for tag in $(echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n'); do
                   manifest=$(docker manifest inspect "$image:$tag" || echo "error")
