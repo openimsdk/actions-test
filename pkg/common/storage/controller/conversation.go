@@ -59,8 +59,6 @@ type ConversationDatabase interface {
 	GetAllConversationIDsNumber(ctx context.Context) (int64, error)
 	// PageConversationIDs paginates through conversation IDs based on the specified pagination settings.
 	PageConversationIDs(ctx context.Context, pagination pagination.Pagination) (conversationIDs []string, err error)
-	// GetConversationsByConversationID retrieves conversations by their IDs.
-	GetConversationsByConversationID(ctx context.Context, conversationIDs []string) ([]*relationtb.Conversation, error)
 	// GetConversationIDsNeedDestruct fetches conversations that need to be destructed based on specific criteria.
 	GetConversationIDsNeedDestruct(ctx context.Context) ([]*relationtb.Conversation, error)
 	// GetConversationNotReceiveMessageUserIDs gets user IDs for users in a conversation who have not received messages.
@@ -127,13 +125,10 @@ func (c *conversationDatabase) SetUsersConversationFieldTx(ctx context.Context, 
 		var conversations []*relationtb.Conversation
 		now := time.Now()
 		for _, v := range NotUserIDs {
-			temp := new(relationtb.Conversation)
-			if err = datautil.CopyStructFields(temp, conversation); err != nil {
-				return err
-			}
+			temp := *conversation
 			temp.OwnerUserID = v
 			temp.CreateTime = now
-			conversations = append(conversations, temp)
+			conversations = append(conversations, &temp)
 		}
 		if len(conversations) > 0 {
 			err = c.conversationDB.Create(ctx, conversations)
@@ -349,10 +344,6 @@ func (c *conversationDatabase) GetAllConversationIDsNumber(ctx context.Context) 
 
 func (c *conversationDatabase) PageConversationIDs(ctx context.Context, pagination pagination.Pagination) ([]string, error) {
 	return c.conversationDB.PageConversationIDs(ctx, pagination)
-}
-
-func (c *conversationDatabase) GetConversationsByConversationID(ctx context.Context, conversationIDs []string) ([]*relationtb.Conversation, error) {
-	return c.conversationDB.GetConversationsByConversationID(ctx, conversationIDs)
 }
 
 func (c *conversationDatabase) GetConversationIDsNeedDestruct(ctx context.Context) ([]*relationtb.Conversation, error) {

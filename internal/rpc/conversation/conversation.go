@@ -24,7 +24,6 @@ import (
 	"github.com/openimsdk/open-im-server/v3/pkg/common/config"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/storage/cache/redis"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/storage/database/mgo"
-	"github.com/openimsdk/open-im-server/v3/pkg/common/storage/model"
 	dbModel "github.com/openimsdk/open-im-server/v3/pkg/common/storage/model"
 	"github.com/openimsdk/open-im-server/v3/pkg/localcache"
 	"github.com/openimsdk/open-im-server/v3/pkg/msgprocessor"
@@ -233,9 +232,28 @@ func (c *conversationServer) getConversations(ctx context.Context, ownerUserID s
 
 // Deprecated
 func (c *conversationServer) SetConversation(ctx context.Context, req *pbconversation.SetConversationReq) (*pbconversation.SetConversationResp, error) {
+	if req.Conversation == nil {
+		return nil, errs.ErrArgs.WrapMsg("conversation must not be nil")
+	}
 	var conversation dbModel.Conversation
-	if err := datautil.CopyStructFields(&conversation, req.Conversation); err != nil {
-		return nil, err
+	conversation.OwnerUserID = req.Conversation.OwnerUserID
+	conversation.ConversationID = req.Conversation.ConversationID
+	conversation.RecvMsgOpt = req.Conversation.RecvMsgOpt
+	conversation.ConversationType = req.Conversation.ConversationType
+	conversation.UserID = req.Conversation.UserID
+	conversation.GroupID = req.Conversation.GroupID
+	conversation.IsPinned = req.Conversation.IsPinned
+	conversation.AttachedInfo = req.Conversation.AttachedInfo
+	conversation.IsPrivateChat = req.Conversation.IsPrivateChat
+	conversation.GroupAtType = req.Conversation.GroupAtType
+	conversation.Ex = req.Conversation.Ex
+	conversation.BurnDuration = req.Conversation.BurnDuration
+	conversation.MinSeq = req.Conversation.MinSeq
+	conversation.MaxSeq = req.Conversation.MaxSeq
+	conversation.MsgDestructTime = req.Conversation.MsgDestructTime
+	conversation.IsMsgDestruct = req.Conversation.IsMsgDestruct
+	if req.Conversation.LatestMsgDestructTime != 0 {
+		conversation.LatestMsgDestructTime = time.UnixMilli(req.Conversation.LatestMsgDestructTime)
 	}
 	err := c.conversationDatabase.SetUserConversations(ctx, req.Conversation.OwnerUserID, []*dbModel.Conversation{&conversation})
 	if err != nil {
@@ -506,17 +524,6 @@ func (c *conversationServer) GetUserConversationIDsHash(ctx context.Context, req
 	return &pbconversation.GetUserConversationIDsHashResp{Hash: hash}, nil
 }
 
-func (c *conversationServer) GetConversationsByConversationID(
-	ctx context.Context,
-	req *pbconversation.GetConversationsByConversationIDReq,
-) (*pbconversation.GetConversationsByConversationIDResp, error) {
-	conversations, err := c.conversationDatabase.GetConversationsByConversationID(ctx, req.ConversationIDs)
-	if err != nil {
-		return nil, err
-	}
-	return &pbconversation.GetConversationsByConversationIDResp{Conversations: convert.ConversationsDB2Pb(conversations)}, nil
-}
-
 func (c *conversationServer) GetConversationOfflinePushUserIDs(ctx context.Context, req *pbconversation.GetConversationOfflinePushUserIDsReq) (*pbconversation.GetConversationOfflinePushUserIDsResp, error) {
 	if req.ConversationID == "" {
 		return nil, errs.ErrArgs.WrapMsg("conversationID is empty")
@@ -606,9 +613,17 @@ func (c *conversationServer) getConversationInfo(
 	}
 	for conversationID, chatLog := range chatLogs {
 		pbchatLog := &pbconversation.ConversationElem{}
-		msgInfo := &pbconversation.MsgInfo{}
-		if err := datautil.CopyStructFields(msgInfo, chatLog); err != nil {
-			return nil, err
+		msgInfo := &pbconversation.MsgInfo{
+			ServerMsgID: chatLog.ServerMsgID,
+			ClientMsgID: chatLog.ClientMsgID,
+			SessionType: chatLog.SessionType,
+			SendID:      chatLog.SendID,
+			RecvID:      chatLog.RecvID,
+			GroupID:     chatLog.GroupID,
+			MsgFrom:     chatLog.MsgFrom,
+			ContentType: chatLog.ContentType,
+			Content:     string(chatLog.Content),
+			Ex:          chatLog.Ex,
 		}
 		switch chatLog.SessionType {
 		case constant.SingleChatType:
@@ -706,56 +721,6 @@ func (c *conversationServer) GetOwnerConversation(ctx context.Context, req *pbco
 		Total:         total,
 		Conversations: convert.ConversationsDB2Pb(conversations),
 	}, nil
-}
-
-func (c *conversationServer) GetConversationsNeedClearMsg(ctx context.Context, _ *pbconversation.GetConversationsNeedClearMsgReq) (*pbconversation.GetConversationsNeedClearMsgResp, error) {
-	num, err := c.conversationDatabase.GetAllConversationIDsNumber(ctx)
-	if err != nil {
-		log.ZError(ctx, "GetAllConversationIDsNumber failed", err)
-		return nil, err
-	}
-	const batchNum = 100
-
-	if num == 0 {
-		return nil, errs.New("Need Destruct Msg is nil").Wrap()
-	}
-
-	maxPage := (num + batchNum - 1) / batchNum
-
-	temp := make([]*model.Conversation, 0, maxPage*batchNum)
-
-	for pageNumber := 0; pageNumber < int(maxPage); pageNumber++ {
-		pagination := &sdkws.RequestPagination{
-			PageNumber: int32(pageNumber),
-			ShowNumber: batchNum,
-		}
-
-		conversationIDs, err := c.conversationDatabase.PageConversationIDs(ctx, pagination)
-		if err != nil {
-			log.ZError(ctx, "PageConversationIDs failed", err, "pageNumber", pageNumber)
-			continue
-		}
-
-		// log.ZDebug(ctx, "PageConversationIDs success", "pageNumber", pageNumber, "conversationIDsNum", len(conversationIDs), "conversationIDs", conversationIDs)
-		if len(conversationIDs) == 0 {
-			continue
-		}
-
-		conversations, err := c.conversationDatabase.GetConversationsByConversationID(ctx, conversationIDs)
-		if err != nil {
-			log.ZError(ctx, "GetConversationsByConversationID failed", err, "conversationIDs", conversationIDs)
-			continue
-		}
-
-		for _, conversation := range conversations {
-			if conversation.IsMsgDestruct && conversation.MsgDestructTime != 0 && ((time.Now().UnixMilli() > (conversation.MsgDestructTime + conversation.LatestMsgDestructTime.UnixMilli() + 8*60*60)) || // 8*60*60 is UTC+8
-				conversation.LatestMsgDestructTime.IsZero()) {
-				temp = append(temp, conversation)
-			}
-		}
-	}
-
-	return &pbconversation.GetConversationsNeedClearMsgResp{Conversations: convert.ConversationsDB2Pb(temp)}, nil
 }
 
 func (c *conversationServer) GetNotNotifyConversationIDs(ctx context.Context, req *pbconversation.GetNotNotifyConversationIDsReq) (*pbconversation.GetNotNotifyConversationIDsResp, error) {
