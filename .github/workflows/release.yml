@@ -121,12 +121,12 @@ jobs:
             gh run watch "${run_id}" --exit-status
           }
 
-          if [[ -f .github/workflows/docker-build.yml ]]; then
-            run_workflow "docker-build.yml" "Docker image publish"
-          elif [[ -f .github/workflows/publish-docker-image.yml ]]; then
+          if [[ -f .github/workflows/publish-docker-image.yml ]]; then
             run_workflow "publish-docker-image.yml" "Docker image publish"
           elif [[ -f .github/workflows/build-docker-image.yml ]]; then
             run_workflow "build-docker-image.yml" "Docker image publish"
+          elif [[ -f .github/workflows/docker-build.yml ]]; then
+            run_workflow "docker-build.yml" "Docker image publish"
           else
             echo "No Docker image workflow found"
           fi
