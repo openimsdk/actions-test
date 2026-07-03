@@ -1,0 +1,178 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to update and release"
+        required: true
+
+permissions:
+  actions: write
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: release-${{ github.event.release.tag_name || github.event.inputs.tag }}
+      cancel-in-progress: false
+    env:
+      TAG_VERSION: ${{ github.event.release.tag_name || github.event.inputs.tag }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || github.event.inputs.tag }}
+          fetch-depth: 0
+          submodules: "recursive"
+
+      - name: Update version file and move tag
+        id: update_version
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${TAG_VERSION}" ]]; then
+            echo "TAG_VERSION is empty"
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          mkdir -p version
+          echo "${TAG_VERSION}" > version/version
+
+          git add version/version
+          if git diff --cached --quiet; then
+            echo "version/version already contains ${TAG_VERSION}"
+          else
+            git commit -m "Update version to ${TAG_VERSION}"
+          fi
+
+          git tag -fa "${TAG_VERSION}" -m "Update version to ${TAG_VERSION}"
+          git push origin "refs/tags/${TAG_VERSION}" --force
+
+          updated_sha="$(git rev-parse HEAD)"
+          echo "updated_sha=${updated_sha}" >> "$GITHUB_OUTPUT"
+          echo "Updated ${TAG_VERSION} to ${updated_sha}"
+
+      - name: Ensure release is published
+        if: ${{ github.event_name == 'release' }}
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { owner, repo } = context.repo;
+            const tagName = process.env.TAG_VERSION;
+            const release = context.payload.release;
+            if (!release) {
+              core.info(`No release payload for ${tagName}`);
+              return;
+            }
+            await github.rest.repos.updateRelease({
+              owner,
+              repo,
+              release_id: release.id,
+              draft: false,
+              prerelease: release.prerelease
+            });
+            core.info(`Release ${tagName} is published.`);
+
+      - name: Run Docker image workflow
+        run: |
+          set -euo pipefail
+
+          run_workflow() {
+            local workflow="$1"
+            local label="$2"
+            local expected_sha="${{ steps.update_version.outputs.updated_sha }}"
+
+            echo "Dispatching ${label}: ${workflow} for ${TAG_VERSION} (${expected_sha})"
+            gh workflow run "${workflow}" --ref "${TAG_VERSION}" -f tag="${TAG_VERSION}"
+
+            local run_id=""
+            for _ in $(seq 1 60); do
+              run_id="$(gh run list \
+                --workflow "${workflow}" \
+                --event workflow_dispatch \
+                --limit 20 \
+                --json databaseId,headBranch,headSha,status,createdAt \
+                --jq ".[] | select(.headBranch == \"${TAG_VERSION}\" and .headSha == \"${expected_sha}\") | .databaseId" \
+                | head -n 1)"
+
+              if [[ -n "${run_id}" ]]; then
+                break
+              fi
+              sleep 5
+            done
+
+            if [[ -z "${run_id}" ]]; then
+              echo "Could not find dispatched run for ${workflow} at ${expected_sha}"
+              gh run list --workflow "${workflow}" --event workflow_dispatch --limit 10
+              exit 1
+            fi
+
+            echo "Waiting for ${label} run ${run_id}"
+            gh run watch "${run_id}" --exit-status
+          }
+
+          if [[ -f .github/workflows/docker-build.yml ]]; then
+            run_workflow "docker-build.yml" "Docker image publish"
+          elif [[ -f .github/workflows/publish-docker-image.yml ]]; then
+            run_workflow "publish-docker-image.yml" "Docker image publish"
+          elif [[ -f .github/workflows/build-docker-image.yml ]]; then
+            run_workflow "build-docker-image.yml" "Docker image publish"
+          else
+            echo "No Docker image workflow found"
+          fi
+
+      - name: Run service images workflow
+        run: |
+          set -euo pipefail
+
+          run_workflow() {
+            local workflow="$1"
+            local label="$2"
+            local expected_sha="${{ steps.update_version.outputs.updated_sha }}"
+
+            echo "Dispatching ${label}: ${workflow} for ${TAG_VERSION} (${expected_sha})"
+            gh workflow run "${workflow}" --ref "${TAG_VERSION}" -f tag="${TAG_VERSION}"
+
+            local run_id=""
+            for _ in $(seq 1 60); do
+              run_id="$(gh run list \
+                --workflow "${workflow}" \
+                --event workflow_dispatch \
+                --limit 20 \
+                --json databaseId,headBranch,headSha,status,createdAt \
+                --jq ".[] | select(.headBranch == \"${TAG_VERSION}\" and .headSha == \"${expected_sha}\") | .databaseId" \
+                | head -n 1)"
+
+              if [[ -n "${run_id}" ]]; then
+                break
+              fi
+              sleep 5
+            done
+
+            if [[ -z "${run_id}" ]]; then
+              echo "Could not find dispatched run for ${workflow} at ${expected_sha}"
+              gh run list --workflow "${workflow}" --event workflow_dispatch --limit 10
+              exit 1
+            fi
+
+            echo "Waiting for ${label} run ${run_id}"
+            gh run watch "${run_id}" --exit-status
+          }
+
+          if [[ -f .github/workflows/docker-build-and-release-services-images.yml ]]; then
+            run_workflow "docker-build-and-release-services-images.yml" "Service images publish"
+          elif [[ -f .github/workflows/build-and-release-services-images.yml ]]; then
+            run_workflow "build-and-release-services-images.yml" "Service images publish"
+          else
+            echo "No service images workflow found"
+          fi
