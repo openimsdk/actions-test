@@ -96,7 +96,8 @@ jobs:
         run: |
           images=("openim/openim-chat" "ghcr.io/${{ github.repository_owner }}/actions-test-openim-chat" "registry.cn-hangzhou.aliyuncs.com/openimsdk/openim-chat")
           for image in "${images[@]}"; do
-              for tag in $(echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n'); do
+              for ref in $(echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n'); do
+                  tag="${ref##*:}"
                   manifest=$(docker manifest inspect "$image:$tag" || echo "error")
                   if [[ "$manifest" == "error" ]]; then
                       echo "Manifest not found for $image:$tag"
