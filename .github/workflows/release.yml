@@ -11,186 +11,36 @@ on:
 
 permissions:
   actions: write
-  contents: read
+  contents: write
   packages: write
 
 concurrency:
-  group: release-${{ github.event.release.tag_name || github.event.inputs.tag }}
+  group: release-${{ github.event.release.tag_name || inputs.tag }}
   cancel-in-progress: false
 
 jobs:
-  release:
-    runs-on: ubuntu-latest
-    env:
-      TAG_VERSION: ${{ github.event.release.tag_name || github.event.inputs.tag }}
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      UPDATE_WORKFLOW: update-version-file-on-release.yml
-    steps:
-      - name: Checkout workflow definitions
-        uses: actions/checkout@v4
+  update-version:
+    uses: ./.github/workflows/update-version-file-on-release.yml
+    with:
+      tag: ${{ github.event.release.tag_name || inputs.tag }}
+    secrets: inherit
 
-      - name: Resolve workflow names
-        id: workflows
-        run: |
-          set -euo pipefail
+  docker-image:
+    needs: update-version
+    uses: ./.github/workflows/docker-build.yml
+    with:
+      tag: ${{ github.event.release.tag_name || inputs.tag }}
+      checkout_sha: ${{ needs.update-version.outputs.updated_sha }}
+      checkout_short_sha: ${{ needs.update-version.outputs.updated_short_sha }}
+    secrets: inherit
 
-          if [[ -f .github/workflows/docker-build.yml ]]; then
-            docker_workflow="docker-build.yml"
-          elif [[ -f .github/workflows/publish-docker-image.yml ]]; then
-            docker_workflow="publish-docker-image.yml"
-          elif [[ -f .github/workflows/build-docker-image.yml ]]; then
-            docker_workflow="build-docker-image.yml"
-          else
-            echo "No Docker image workflow found" >&2
-            exit 1
-          fi
-
-          if [[ -f .github/workflows/docker-build-and-release-services-images.yml ]]; then
-            service_workflow="docker-build-and-release-services-images.yml"
-          elif [[ -f .github/workflows/build-and-release-services-images.yml ]]; then
-            service_workflow="build-and-release-services-images.yml"
-          else
-            echo "No service images workflow found" >&2
-            exit 1
-          fi
-
-          echo "docker_workflow=$docker_workflow" >> "$GITHUB_OUTPUT"
-          echo "service_workflow=$service_workflow" >> "$GITHUB_OUTPUT"
-
-      - name: Run Update Version workflow
-        id: update
-        env:
-          WORKFLOW: ${{ env.UPDATE_WORKFLOW }}
-        run: |
-          set -euo pipefail
-
-          run_workflow() {
-            local workflow="$1"
-            local label="$2"
-            local before_time
-            before_time="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-
-            echo "Dispatching ${label}: ${workflow} for ${TAG_VERSION}"
-            gh workflow run "$workflow" --ref "$TAG_VERSION" -f tag="$TAG_VERSION"
-
-            local run_id=""
-            for _ in $(seq 1 60); do
-              run_id="$(gh run list \
-                --workflow "$workflow" \
-                --event workflow_dispatch \
-                --branch "$TAG_VERSION" \
-                --json databaseId,createdAt \
-                --limit 20 \
-                --jq ".[] | select(.createdAt >= \"$before_time\") | .databaseId" \
-                | head -n 1)"
-
-              if [[ -n "$run_id" ]]; then
-                echo "Waiting for ${label} run ${run_id}"
-                gh run watch "$run_id" --exit-status --interval 10
-                echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
-                return 0
-              fi
-              sleep 5
-            done
-
-            echo "Could not find dispatched run for ${workflow}" >&2
-            gh run list --workflow "$workflow" --event workflow_dispatch --branch "$TAG_VERSION" --limit 10
-            exit 1
-          }
-
-          run_workflow "$WORKFLOW" "Update Version"
-
-      - name: Resolve updated tag SHA
-        id: tag
-        run: |
-          set -euo pipefail
-
-          updated_sha="$(gh api "/repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG_VERSION}" --jq '.object.sha')"
-          object_type="$(gh api "/repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG_VERSION}" --jq '.object.type')"
-
-          if [[ "$object_type" == "tag" ]]; then
-            updated_sha="$(gh api "/repos/${GITHUB_REPOSITORY}/git/tags/${updated_sha}" --jq '.object.sha')"
-          fi
-
-          echo "updated_sha=$updated_sha" >> "$GITHUB_OUTPUT"
-          echo "Updated tag ${TAG_VERSION} points to ${updated_sha}"
-
-      - name: Run Docker image workflow
-        env:
-          WORKFLOW: ${{ steps.workflows.outputs.docker_workflow }}
-          UPDATED_SHA: ${{ steps.tag.outputs.updated_sha }}
-        run: |
-          set -euo pipefail
-
-          run_workflow() {
-            local workflow="$1"
-            local label="$2"
-
-            echo "Dispatching ${label}: ${workflow} for ${TAG_VERSION} (${UPDATED_SHA})"
-            gh workflow run "$workflow" --ref "$TAG_VERSION" -f tag="$TAG_VERSION"
-
-            local run_id=""
-            for _ in $(seq 1 60); do
-              run_id="$(gh run list \
-                --workflow "$workflow" \
-                --event workflow_dispatch \
-                --branch "$TAG_VERSION" \
-                --json databaseId,headSha,createdAt \
-                --limit 20 \
-                --jq ".[] | select(.headSha == \"$UPDATED_SHA\") | .databaseId" \
-                | head -n 1)"
-
-              if [[ -n "$run_id" ]]; then
-                echo "Waiting for ${label} run ${run_id}"
-                gh run watch "$run_id" --exit-status --interval 10
-                return 0
-              fi
-              sleep 5
-            done
-
-            echo "Could not find dispatched run for ${workflow} at ${UPDATED_SHA}" >&2
-            gh run list --workflow "$workflow" --event workflow_dispatch --branch "$TAG_VERSION" --limit 10
-            exit 1
-          }
-
-          run_workflow "$WORKFLOW" "Docker image publish"
-
-      - name: Run service images workflow
-        env:
-          WORKFLOW: ${{ steps.workflows.outputs.service_workflow }}
-          UPDATED_SHA: ${{ steps.tag.outputs.updated_sha }}
-        run: |
-          set -euo pipefail
-
-          run_workflow() {
-            local workflow="$1"
-            local label="$2"
-
-            echo "Dispatching ${label}: ${workflow} for ${TAG_VERSION} (${UPDATED_SHA})"
-            gh workflow run "$workflow" --ref "$TAG_VERSION" -f tag="$TAG_VERSION"
-
-            local run_id=""
-            for _ in $(seq 1 60); do
-              run_id="$(gh run list \
-                --workflow "$workflow" \
-                --event workflow_dispatch \
-                --branch "$TAG_VERSION" \
-                --json databaseId,headSha,createdAt \
-                --limit 20 \
-                --jq ".[] | select(.headSha == \"$UPDATED_SHA\") | .databaseId" \
-                | head -n 1)"
-
-              if [[ -n "$run_id" ]]; then
-                echo "Waiting for ${label} run ${run_id}"
-                gh run watch "$run_id" --exit-status --interval 10
-                return 0
-              fi
-              sleep 5
-            done
-
-            echo "Could not find dispatched run for ${workflow} at ${UPDATED_SHA}" >&2
-            gh run list --workflow "$workflow" --event workflow_dispatch --branch "$TAG_VERSION" --limit 10
-            exit 1
-          }
-
-          run_workflow "$WORKFLOW" "Service images publish"
+  service-images:
+    needs:
+      - update-version
+      - docker-image
+    uses: ./.github/workflows/build-and-release-services-images.yml
+    with:
+      tag: ${{ github.event.release.tag_name || inputs.tag }}
+      checkout_sha: ${{ needs.update-version.outputs.updated_sha }}
+      checkout_short_sha: ${{ needs.update-version.outputs.updated_short_sha }}
+    secrets: inherit
