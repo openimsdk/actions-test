@@ -20,6 +20,8 @@ concurrency:
 
 jobs:
   update-version:
+    permissions:
+      contents: write
     uses: ./.github/workflows/update-version-file-on-release.yml
     with:
       tag: ${{ github.event.release.tag_name || inputs.tag }}
@@ -27,6 +29,9 @@ jobs:
 
   docker-image:
     needs: update-version
+    permissions:
+      contents: read
+      packages: write
     uses: ./.github/workflows/build-docker-image.yml
     with:
       tag: ${{ github.event.release.tag_name || inputs.tag }}
@@ -36,6 +41,9 @@ jobs:
 
   service-images:
     needs: update-version
+    permissions:
+      contents: read
+      packages: write
     uses: ./.github/workflows/docker-build-and-release-services-images.yml
     with:
       tag: ${{ github.event.release.tag_name || inputs.tag }}
