@@ -35,9 +35,7 @@ jobs:
     secrets: inherit
 
   service-images:
-    needs:
-      - update-version
-      - docker-image
+    needs: update-version
     uses: ./.github/workflows/build-and-release-services-images.yml
     with:
       tag: ${{ github.event.release.tag_name || inputs.tag }}
