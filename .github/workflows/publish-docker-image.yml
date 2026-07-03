@@ -59,7 +59,7 @@ jobs:
         with:
           images: |
             ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}
-            ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+            ghcr.io/${{ github.repository_owner }}/actions-test-${{ env.IMAGE_NAME }}
             registry.cn-hangzhou.aliyuncs.com/openimsdk/${{ env.IMAGE_NAME }}
           tags: |
             type=ref,event=tag
@@ -184,7 +184,7 @@ jobs:
         run: |
           images=(
             "${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}"
-            "ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}"
+            "ghcr.io/${{ github.repository_owner }}/actions-test-${{ env.IMAGE_NAME }}"
             "registry.cn-hangzhou.aliyuncs.com/openimsdk/${{ env.IMAGE_NAME }}"
           )
 
