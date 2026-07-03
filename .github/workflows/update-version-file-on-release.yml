@@ -51,7 +51,6 @@ jobs:
         run: |
           if git rev-parse ${{ env.TAG_VERSION }} >/dev/null 2>&1; then
             git tag -d ${{ env.TAG_VERSION }}
-            git push --delete origin ${{ env.TAG_VERSION }}
           fi
 
       # Step 4: Update version file
@@ -72,7 +71,7 @@ jobs:
       - name: Update tag
         run: |
           git tag -fa ${{ env.TAG_VERSION }} -m "Update version to ${{ env.TAG_VERSION }}"
-          git push origin ${{ env.TAG_VERSION }} --force
+          git push origin refs/tags/${{ env.TAG_VERSION }}:refs/tags/${{ env.TAG_VERSION }} --force
 
       - name: Resolve updated tag SHA
         id: resolve-tag
