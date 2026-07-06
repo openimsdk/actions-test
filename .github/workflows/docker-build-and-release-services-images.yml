@@ -74,6 +74,7 @@ jobs:
             type=sha,enable=${{ inputs.checkout_short_sha == '' }}
             type=raw,value=sha-${{ inputs.checkout_short_sha }},enable=${{ inputs.checkout_short_sha != '' }}
             type=raw,value=${{ inputs.tag || github.event.inputs.tag }}
+            type=raw,value=latest,enable=${{ github.event_name == 'release' && !github.event.release.prerelease }}
 
       - name: Build and push Docker images
         env:
